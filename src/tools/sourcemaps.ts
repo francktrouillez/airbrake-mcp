@@ -8,7 +8,8 @@ const pageSchema = z.object({
 });
 
 // Sourcemap IDs may be snowflakes — pass as string to avoid precision loss.
-const sourcemapId = z.string().min(1);
+// Digits-only regex prevents path traversal via URL-normalized `..` segments.
+const sourcemapId = z.string().regex(/^\d+$/, 'must be a numeric snowflake ID (digits only)');
 
 const inputSchema = z.discriminatedUnion('action', [
   z

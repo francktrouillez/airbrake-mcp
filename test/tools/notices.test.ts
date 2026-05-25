@@ -70,6 +70,25 @@ describe('airbrake_notices', () => {
     ).rejects.toThrow();
   });
 
+  it('rejects path traversal in group_id and notice_id', async () => {
+    await expect(
+      noticesTool.handler(ctx(), {
+        action: 'get',
+        project_id: 1,
+        group_id: '../../admin',
+        notice_id: NOTICE_ID,
+      }),
+    ).rejects.toThrow(/snowflake/i);
+    await expect(
+      noticesTool.handler(ctx(), {
+        action: 'get',
+        project_id: 1,
+        group_id: GROUP_ID,
+        notice_id: '../999',
+      }),
+    ).rejects.toThrow(/snowflake/i);
+  });
+
   it('get_status → GET /api/v4/projects/:pid/notice-status/:uuid', async () => {
     nock('https://api.airbrake.io')
       .get('/api/v4/projects/1/notice-status/abc-123-uuid')
@@ -80,5 +99,17 @@ describe('airbrake_notices', () => {
       notice_uuid: 'abc-123-uuid',
     });
     expect(r).toEqual({ status: 'accepted' });
+  });
+
+  it('rejects path traversal / slashes in notice_uuid', async () => {
+    for (const bad of ['../etc/passwd', 'abc/123', 'foo.bar', '']) {
+      await expect(
+        noticesTool.handler(ctx(), {
+          action: 'get_status',
+          project_id: 1,
+          notice_uuid: bad,
+        }),
+      ).rejects.toThrow(/alphanumerics/i);
+    }
   });
 });

@@ -81,6 +81,20 @@ describe('airbrake_groups', () => {
     ).rejects.toThrow();
   });
 
+  it('rejects path traversal in group_id', async () => {
+    for (const bad of ['../../999', '123/../999', 'abc', '123abc', '../etc/passwd', '']) {
+      await expect(
+        groupsTool.handler(ctx(), { action: 'delete', project_id: 1, group_id: bad }),
+      ).rejects.toThrow(/snowflake/i);
+    }
+  });
+
+  it('rejects path traversal in deploy_id filter', async () => {
+    await expect(
+      groupsTool.handler(ctx(), { action: 'list', project_id: 1, deploy_id: '../../999' }),
+    ).rejects.toThrow(/snowflake/i);
+  });
+
   it('get_stats → GET /api/v5/.../stats with required time params', async () => {
     nock('https://api.airbrake.io')
       .get(`/api/v5/projects/1/groups/${GROUP_ID}/stats`)

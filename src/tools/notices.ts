@@ -8,7 +8,13 @@ const pageSchema = z.object({
 });
 
 // Group/notice IDs are 19-digit snowflakes — must be strings (see groups.ts).
-const snowflakeId = z.string().min(1);
+// Digits-only regex prevents path traversal via URL-normalized `..` segments.
+const snowflakeId = z.string().regex(/^\d+$/, 'must be a numeric snowflake ID (digits only)');
+// Notice UUIDs returned by Airbrake are alphanumerics + hyphens; restrict
+// to that shape so `..` / `/` cannot escape the path segment.
+const noticeUuid = z
+  .string()
+  .regex(/^[A-Za-z0-9-]+$/, 'must contain only alphanumerics and hyphens');
 
 const inputSchema = z.discriminatedUnion('action', [
   z
@@ -28,7 +34,7 @@ const inputSchema = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('get_status'),
     project_id: z.number().int().positive(),
-    notice_uuid: z.string().min(1).describe('UUID returned when the notice was first reported'),
+    notice_uuid: noticeUuid.describe('UUID returned when the notice was first reported'),
   }),
 ]);
 

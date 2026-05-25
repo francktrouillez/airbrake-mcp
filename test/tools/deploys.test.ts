@@ -49,6 +49,14 @@ describe('airbrake_deploys', () => {
     ).rejects.toThrow();
   });
 
+  it('rejects path traversal in deploy_id', async () => {
+    for (const bad of ['../../999', 'abc', '123/../999']) {
+      await expect(
+        deploysTool.handler(ctx(), { action: 'get', project_id: 1, deploy_id: bad }),
+      ).rejects.toThrow(/snowflake/i);
+    }
+  });
+
   it('create → POST with FLAT body (no { deploy: ... } wrapper)', async () => {
     // Verified against live Airbrake: the wrapped payload silently creates
     // an empty deploy marker; the flat payload persists all fields.

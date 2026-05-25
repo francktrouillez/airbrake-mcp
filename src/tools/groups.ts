@@ -10,9 +10,11 @@ const pageSchema = z.object({
 // Airbrake group/deploy IDs are 19-digit snowflakes that exceed
 // Number.MAX_SAFE_INTEGER. They MUST be passed as strings — the JSON
 // number representation loses precision (the last 3-5 digits get rounded
-// to zero) and the lookup 404s. We accept only string here so the LLM
-// is forced to quote the value in its tool call.
-const snowflakeId = z.string().min(1);
+// to zero) and the lookup 404s. The /^\d+$/ regex also blocks path
+// traversal: these IDs are interpolated raw into URL paths and fetch
+// normalizes `..` segments, so an unconstrained string would let a
+// jailbroken LLM redirect destructive verbs to arbitrary URL paths.
+const snowflakeId = z.string().regex(/^\d+$/, 'must be a numeric snowflake ID (digits only)');
 
 const groupRef = z.object({
   project_id: z.number().int().positive(),

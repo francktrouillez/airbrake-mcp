@@ -49,4 +49,12 @@ describe('airbrake_sourcemaps', () => {
     });
     expect(r).toBeNull();
   });
+
+  it('rejects path traversal in sourcemap_id', async () => {
+    for (const bad of ['../../999', 'abc', '123/../999']) {
+      await expect(
+        sourcemapsTool.handler(ctx(), { action: 'delete', project_id: 1, sourcemap_id: bad }),
+      ).rejects.toThrow(/snowflake/i);
+    }
+  });
 });

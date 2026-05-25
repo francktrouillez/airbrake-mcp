@@ -8,7 +8,8 @@ const pageSchema = z.object({
 });
 
 // Deploy IDs are 19-digit snowflakes — must be strings (see groups.ts).
-const snowflakeId = z.string().min(1);
+// Digits-only regex prevents path traversal via URL-normalized `..` segments.
+const snowflakeId = z.string().regex(/^\d+$/, 'must be a numeric snowflake ID (digits only)');
 
 const inputSchema = z.discriminatedUnion('action', [
   z
