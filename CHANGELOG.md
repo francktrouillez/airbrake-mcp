@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] — 2026-05-25
+
+### Fixed
+
+- README and CHANGELOG disclaimer now correctly say "Airbrake" (the
+  company is named Airbrake, not "Airbrake Technologies"). No code
+  changes; published version on npm now reflects the corrected wording.
+
 ## [0.1.0] — 2026-05-25
 
 Initial public release. Eight resource-grouped tools cover what hosted Airbrake
@@ -45,5 +53,6 @@ API tokens (and therefore not modeled), and for endpoints we expose that
 aren't in Airbrake's public docs (live-verified working on hosted
 Airbrake but not part of the public contract).
 
-[Unreleased]: https://github.com/francktrouillez/airbrake-mcp/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/francktrouillez/airbrake-mcp/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/francktrouillez/airbrake-mcp/releases/tag/v0.1.1
 [0.1.0]: https://github.com/francktrouillez/airbrake-mcp/releases/tag/v0.1.0

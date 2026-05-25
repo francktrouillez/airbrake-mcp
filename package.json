@@ -1,6 +1,6 @@
 {
   "name": "airbrake-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "MCP (Model Context Protocol) server exposing the Airbrake public API to LLM clients — projects, error groups, notices, deploys, v5 APM, source maps, and the v3 Notifier.",
   "keywords": [
     "mcp",
