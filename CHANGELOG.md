@@ -39,7 +39,7 @@ escape hatch for any endpoint not directly modeled.
 ### Notes
 
 This is an **unofficial** project, not affiliated with or endorsed by
-Airbrake Technologies. See the README "Coverage caveats" section for
+Airbrake. See the README "Coverage caveats" section for
 endpoints that are documented by Airbrake but unreachable from Personal
 API tokens (and therefore not modeled), and for endpoints we expose that
 aren't in Airbrake's public docs (live-verified working on hosted

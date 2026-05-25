@@ -9,7 +9,7 @@ An MCP (Model Context Protocol) server that exposes the Airbrake public API to L
 
 Eight resource-grouped tools cover what hosted Airbrake actually exposes (projects, error groups, notices, deploys, v5 APM, source maps, the v3 Notifier), plus a generic `airbrake_request` escape hatch for endpoints not directly modeled — including project-key endpoints and multipart uploads.
 
-**Unofficial. Not affiliated with or endorsed by Airbrake Technologies.**
+**Unofficial. Not affiliated with or endorsed by Airbrake.**
 
 ## Install
 
