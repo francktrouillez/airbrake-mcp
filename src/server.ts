@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
@@ -7,6 +8,13 @@ import { AirbrakeClient } from './client/airbrake.js';
 import { loadConfig } from './config.js';
 import { allTools } from './tools/index.js';
 import type { ToolContext } from './tools/types.js';
+
+// Read version from package.json at runtime so it can never drift from
+// the published version. Resolution: `../package.json` from src/server.ts
+// (dev via tsx) and from dist/server.js (published) both land on the
+// package root's package.json, which npm always ships.
+const require = createRequire(import.meta.url);
+const { version: PKG_VERSION } = require('../package.json') as { version: string };
 
 // MCP clients (notably Claude) reject tool inputSchemas that use top-level
 // `anyOf` / `oneOf` / `allOf`. Zod's `discriminatedUnion` compiles to
@@ -86,7 +94,7 @@ export async function createServer(
   const ctx: ToolContext = { client, config };
 
   const server = new Server(
-    { name: 'airbrake-mcp', version: '0.1.0' },
+    { name: 'airbrake-mcp', version: PKG_VERSION },
     { capabilities: { tools: {} } },
   );
 
