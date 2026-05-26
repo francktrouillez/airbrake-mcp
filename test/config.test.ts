@@ -116,21 +116,21 @@ describe('loadConfig', () => {
 
   describe('numeric env validation', () => {
     it('rejects negative AIRBRAKE_TIMEOUT_MS', () => {
-      expect(() =>
-        loadConfig({ AIRBRAKE_USER_TOKEN: 'x', AIRBRAKE_TIMEOUT_MS: '-1' }),
-      ).toThrow(/AIRBRAKE_TIMEOUT_MS/);
+      expect(() => loadConfig({ AIRBRAKE_USER_TOKEN: 'x', AIRBRAKE_TIMEOUT_MS: '-1' })).toThrow(
+        /AIRBRAKE_TIMEOUT_MS/,
+      );
     });
 
     it('rejects zero AIRBRAKE_TIMEOUT_MS (would abort every request)', () => {
-      expect(() =>
-        loadConfig({ AIRBRAKE_USER_TOKEN: 'x', AIRBRAKE_TIMEOUT_MS: '0' }),
-      ).toThrow(/AIRBRAKE_TIMEOUT_MS/);
+      expect(() => loadConfig({ AIRBRAKE_USER_TOKEN: 'x', AIRBRAKE_TIMEOUT_MS: '0' })).toThrow(
+        /AIRBRAKE_TIMEOUT_MS/,
+      );
     });
 
     it('rejects negative AIRBRAKE_MAX_RETRIES', () => {
-      expect(() =>
-        loadConfig({ AIRBRAKE_USER_TOKEN: 'x', AIRBRAKE_MAX_RETRIES: '-1' }),
-      ).toThrow(/AIRBRAKE_MAX_RETRIES/);
+      expect(() => loadConfig({ AIRBRAKE_USER_TOKEN: 'x', AIRBRAKE_MAX_RETRIES: '-1' })).toThrow(
+        /AIRBRAKE_MAX_RETRIES/,
+      );
     });
 
     it('accepts zero AIRBRAKE_MAX_RETRIES (retries disabled)', () => {
