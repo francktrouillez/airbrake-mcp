@@ -1,14 +1,17 @@
 version: 2
+# Routine version-update PRs are disabled (open-pull-requests-limit: 0).
+# Dependabot Security Updates is enabled at the repo level (Settings → Code
+# security) and is unaffected by this limit — CVE-triggered PRs still get
+# opened automatically. The ecosystem entries are kept so the dependency
+# graph is parsed and the security scanner knows what to look for.
 updates:
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
-    groups:
-      dev-dependencies:
-        dependency-type: development
+    open-pull-requests-limit: 0
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    open-pull-requests-limit: 0
