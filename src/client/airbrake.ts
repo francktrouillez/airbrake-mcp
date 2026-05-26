@@ -60,6 +60,25 @@ async function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+// Strip security-sensitive headers from user-supplied input and normalize
+// remaining keys to lowercase. Without this, a case-variant `Authorization`
+// header from an LLM survives as a distinct object key and Node's Headers
+// constructor *appends* duplicate-name headers — the wire ends up sending
+// `Authorization: <attacker>, Bearer <real_token>` (verified). Stripping
+// host/cookie closes related abuse vectors against fixed-host destinations.
+const RESERVED_HEADERS = new Set(['authorization', 'host', 'cookie']);
+
+function sanitizeUserHeaders(input: Record<string, string> | undefined): Record<string, string> {
+  if (!input) return {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(input)) {
+    const lower = k.toLowerCase();
+    if (RESERVED_HEADERS.has(lower)) continue;
+    out[lower] = v;
+  }
+  return out;
+}
+
 export class AirbrakeClient {
   constructor(private readonly config: Config) {}
 
@@ -67,7 +86,7 @@ export class AirbrakeClient {
     const url = `${this.config.host}${path}${buildQuery(options.query)}`;
     const headers: Record<string, string> = {
       accept: 'application/json',
-      ...(options.headers ?? {}),
+      ...sanitizeUserHeaders(options.headers),
     };
     if (options.auth !== 'none') {
       if (!this.config.userToken) {

@@ -264,4 +264,35 @@ describe('AirbrakeClient', () => {
     });
     expect(result).toEqual({ id: 'n_1' });
   });
+
+  it('strips case-variant Authorization from user headers and uses real bearer', async () => {
+    // Without sanitization, { Authorization: 'attacker', ... } and our
+    // lowercase `authorization` would both reach `new Headers(...)` and be
+    // concatenated as "attacker, Bearer tok_abc" — leaking attacker content
+    // into the outbound auth header. With sanitization, only the real bearer
+    // is sent.
+    nock('https://api.airbrake.io', {
+      reqheaders: { authorization: (v) => v === 'Bearer tok_abc' },
+    })
+      .get('/api/v4/projects')
+      .reply(200, { projects: [] });
+    const client = new AirbrakeClient(baseConfig);
+    const result = await client.request('GET', '/api/v4/projects', {
+      headers: { Authorization: 'attacker', authorization: 'also-attacker' },
+    });
+    expect(result).toEqual({ projects: [] });
+  });
+
+  it('strips Host and Cookie from user headers', async () => {
+    nock('https://api.airbrake.io', {
+      badheaders: ['cookie'],
+    })
+      .get('/api/v4/projects')
+      .reply(200, { projects: [] });
+    const client = new AirbrakeClient(baseConfig);
+    const result = await client.request('GET', '/api/v4/projects', {
+      headers: { Cookie: 'session=evil', Host: 'evil.example.com' },
+    });
+    expect(result).toEqual({ projects: [] });
+  });
 });
