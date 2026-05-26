@@ -33,6 +33,36 @@ describe('airbrake_request tool', () => {
     ).rejects.toThrow(/path/);
   });
 
+  it('rejects path traversal that bypasses startsWith("/api/")', async () => {
+    for (const bad of [
+      '/api/../admin',
+      '/api/v4/../../admin',
+      '/api/x/../../../etc/passwd',
+      '/api/%2e%2e/admin',
+      '/api/%2E%2E/admin',
+    ]) {
+      await expect(
+        requestTool.handler(
+          { client: new AirbrakeClient(cfg), config: cfg },
+          { method: 'GET', path: bad },
+        ),
+      ).rejects.toThrow(/traversal/i);
+    }
+  });
+
+  it('rejects CR/LF in header values', async () => {
+    await expect(
+      requestTool.handler(
+        { client: new AirbrakeClient(cfg), config: cfg },
+        {
+          method: 'GET',
+          path: '/api/v4/projects',
+          headers: { 'x-bad': 'value\r\nX-Injected: yes' },
+        },
+      ),
+    ).rejects.toThrow(/CR or LF/);
+  });
+
   it('forwards auth:none for project-key endpoints', async () => {
     nock('https://api.airbrake.io', { badheaders: ['authorization'] })
       .post('/api/v3/projects/1/notices')
