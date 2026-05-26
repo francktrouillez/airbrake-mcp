@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import nock from 'nock';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { createServer } from '../src/server.js';
@@ -118,5 +118,31 @@ describe('MCP server integration', () => {
     )) as { isError: boolean; content: { text: string }[] };
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toMatch(/401/);
+  });
+
+  describe('startup warnings', () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    it('warns to stderr when AIRBRAKE_USER_TOKEN is unset', async () => {
+      const writes: string[] = [];
+      vi.spyOn(process.stderr, 'write').mockImplementation(((chunk: string | Uint8Array) => {
+        writes.push(String(chunk));
+        return true;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      }) as any);
+      await createServer({});
+      expect(writes.some((s) => /AIRBRAKE_USER_TOKEN/.test(s))).toBe(true);
+    });
+
+    it('does not warn when AIRBRAKE_USER_TOKEN is set', async () => {
+      const writes: string[] = [];
+      vi.spyOn(process.stderr, 'write').mockImplementation(((chunk: string | Uint8Array) => {
+        writes.push(String(chunk));
+        return true;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      }) as any);
+      await createServer({ AIRBRAKE_USER_TOKEN: 'tok' });
+      expect(writes.length).toBe(0);
+    });
   });
 });

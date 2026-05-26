@@ -73,6 +73,15 @@ export async function createServer(
   env: NodeJS.ProcessEnv | Record<string, string | undefined> = process.env,
 ): Promise<Server> {
   const config = loadConfig(env);
+  if (!config.userToken) {
+    // Notify-only setups (only airbrake_notify, no management API) are
+    // legitimate without a user token, so this is a warning rather than a
+    // hard failure. But silently accepting empty token + management calls
+    // means every request 401s with no startup signal — surface it once.
+    process.stderr.write(
+      'airbrake-mcp: warning: AIRBRAKE_USER_TOKEN is not set — management API calls will fail with 401 (notify-only setups can ignore this)\n',
+    );
+  }
   const client = new AirbrakeClient(config);
   const ctx: ToolContext = { client, config };
 
