@@ -3,6 +3,15 @@ import { AirbrakeApiError, AirbrakeNetworkError } from './errors.js';
 
 export type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
 
+// A server-supplied Retry-After of `Fri, 31 Dec 9999 23:59:59 GMT` parses as
+// a ~253-trillion-ms sleep — effectively a stall that holds the bearer token
+// in memory and blocks the MCP client's tool call. Cap at 60s.
+export const MAX_RETRY_DELAY_MS = 60_000;
+// `await response.text()` reads with no size limit. A malicious or compromised
+// upstream can send a multi-GB body and OOM the Node process. 25 MB matches
+// the largest realistic Airbrake list response.
+export const MAX_RESPONSE_BYTES = 25 * 1024 * 1024;
+
 export interface RequestOptions {
   query?: Record<string, string | number | boolean | undefined>;
   body?: unknown;
@@ -104,13 +113,23 @@ export class AirbrakeClient {
 
       if (isRetriable(response.status) && attempt < this.config.maxRetries) {
         const retryAfterMs = parseRetryAfter(response.headers.get('retry-after'));
-        const delay = retryAfterMs !== null ? retryAfterMs : backoffMs(attempt);
+        const rawDelay = retryAfterMs !== null ? retryAfterMs : backoffMs(attempt);
+        const delay = Math.min(MAX_RETRY_DELAY_MS, rawDelay);
         await sleep(delay);
         attempt++;
         continue;
       }
 
-      const text = response.status === 204 ? '' : await response.text();
+      let text = '';
+      if (response.status !== 204) {
+        try {
+          text = await readBodyWithLimit(response, MAX_RESPONSE_BYTES);
+        } catch (err) {
+          throw new AirbrakeApiError(response.status, method, path, {
+            message: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
       let parsed: unknown = null;
       if (text.length > 0) {
         try {
@@ -126,4 +145,47 @@ export class AirbrakeClient {
       return parsed;
     }
   }
+}
+
+// Reads the body via a streaming reader and aborts if it exceeds `max` bytes.
+// Pre-checks Content-Length to fail fast when the server is honest about size.
+// Exported for direct testing — the production cap (25 MB) is too large to
+// allocate in a unit test, so tests exercise the cap logic with a small max.
+export async function readBodyWithLimit(response: Response, max: number): Promise<string> {
+  const cl = response.headers.get('content-length');
+  if (cl !== null) {
+    const n = Number(cl);
+    if (Number.isFinite(n) && n > max) {
+      throw new Error(`response body exceeds ${max} bytes (Content-Length: ${n})`);
+    }
+  }
+  if (!response.body) return '';
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > max) {
+        await reader.cancel();
+        throw new Error(`response body exceeds ${max} bytes`);
+      }
+      chunks.push(value);
+    }
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {
+      // already released by cancel(); ignore
+    }
+  }
+  const merged = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder('utf-8').decode(merged);
 }

@@ -1,7 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import nock from 'nock';
-import { AirbrakeClient, backoffMs, parseRetryAfter } from '../../src/client/airbrake.js';
-import { AirbrakeNetworkError } from '../../src/client/errors.js';
+import {
+  AirbrakeClient,
+  MAX_RESPONSE_BYTES,
+  MAX_RETRY_DELAY_MS,
+  backoffMs,
+  parseRetryAfter,
+  readBodyWithLimit,
+} from '../../src/client/airbrake.js';
+import { AirbrakeApiError, AirbrakeNetworkError } from '../../src/client/errors.js';
 
 const baseConfig = {
   userToken: 'tok_abc',
@@ -126,6 +133,55 @@ describe('AirbrakeClient', () => {
     const client = new AirbrakeClient(baseConfig);
     const result = await client.request('DELETE', '/api/v4/projects/1/groups/2');
     expect(result).toBeNull();
+  });
+
+  it('parses huge Retry-After dates but clamping is applied in request()', () => {
+    // A server-supplied year-9999 date parses to ~253 trillion ms. The cap in
+    // request() must clamp this so the client doesn't stall forever holding
+    // the bearer token.
+    const huge = parseRetryAfter('Fri, 31 Dec 9999 23:59:59 GMT');
+    expect(huge).not.toBeNull();
+    expect(huge!).toBeGreaterThan(MAX_RETRY_DELAY_MS);
+    // The clamp formula used in client.request:
+    expect(Math.min(MAX_RETRY_DELAY_MS, huge!)).toBe(MAX_RETRY_DELAY_MS);
+  });
+
+  it('rejects oversized response body via Content-Length', async () => {
+    nock('https://api.airbrake.io')
+      .get('/api/v4/projects')
+      .reply(200, 'x', { 'Content-Length': String(MAX_RESPONSE_BYTES + 1) });
+    const client = new AirbrakeClient({ ...baseConfig, maxRetries: 0 });
+    await expect(client.request('GET', '/api/v4/projects')).rejects.toBeInstanceOf(
+      AirbrakeApiError,
+    );
+  });
+
+  describe('readBodyWithLimit helper', () => {
+    it('reads bodies under the cap', async () => {
+      const body = 'hello';
+      const resp = new Response(body);
+      const out = await readBodyWithLimit(resp, 1024);
+      expect(out).toBe(body);
+    });
+
+    it('rejects bodies that exceed the streamed cap', async () => {
+      const tinyCap = 16;
+      const big = 'a'.repeat(tinyCap + 1);
+      const resp = new Response(big);
+      await expect(readBodyWithLimit(resp, tinyCap)).rejects.toThrow(/exceeds 16 bytes/);
+    });
+
+    it('rejects upfront on oversized Content-Length', async () => {
+      // Build a response whose Content-Length declares too many bytes.
+      const resp = new Response('x', { headers: { 'content-length': '999' } });
+      await expect(readBodyWithLimit(resp, 100)).rejects.toThrow(/Content-Length/);
+    });
+
+    it('handles null body without throwing', async () => {
+      const resp = new Response(null, { status: 204 });
+      const out = await readBodyWithLimit(resp, 1024);
+      expect(out).toBe('');
+    });
   });
 
   describe('parseRetryAfter helper', () => {
