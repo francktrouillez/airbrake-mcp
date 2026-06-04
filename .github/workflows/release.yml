@@ -1,0 +1,58 @@
+name: release
+
+# Publishes to npm when a GitHub Release is published.
+# Auth is OIDC "trusted publishing" (configured on npmjs.com) — no NPM_TOKEN secret.
+on:
+  release:
+    types: [published]
+
+# Least privilege: only the OIDC token (for trusted publishing + provenance).
+# No `contents: write` — the GitHub Release already exists; we don't modify it.
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: release-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - run: npm ci
+
+      # ci.yml triggers on push-to-main / PRs, not on release events,
+      # so run the full quality gate here before publishing.
+      - run: npm audit --audit-level=high
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm run validate
+
+      - name: Verify package.json version matches the release tag
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          PKG=$(node -p "require('./package.json').version")
+          TAG=${RELEASE_TAG#v}
+          if [ "$PKG" != "$TAG" ]; then
+            echo "::error::package.json ($PKG) does not match release tag ($TAG)"
+            exit 1
+          fi
+
+      # OIDC trusted publishing needs npm >= 11.5.1 (the Node 22 runner ships npm 10.x).
+      - run: npm install -g npm@latest
+
+      - name: Publish to npm (OIDC trusted publishing + provenance)
+        run: npm publish --provenance --access public
