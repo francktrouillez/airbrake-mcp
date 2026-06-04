@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] — 2026-06-04
+
+### Security
+
+- Bumped `vitest` from 2.1.9 to 4.1.0 (dev dependency) to remediate a
+  critical advisory in the Vitest UI server (GHSA-5xrq-8626-4rwp) and the
+  related moderate `esbuild`/`vite` advisories (GHSA-67mh-4wv8-2f99). This
+  is a dev/CI toolchain change only — the published package has no runtime
+  changes from 0.1.2.
+
 ## [0.1.2] — 2026-05-26
 
 ### Security
@@ -95,7 +105,8 @@ API tokens (and therefore not modeled), and for endpoints we expose that
 aren't in Airbrake's public docs (live-verified working on hosted
 Airbrake but not part of the public contract).
 
-[Unreleased]: https://github.com/francktrouillez/airbrake-mcp/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/francktrouillez/airbrake-mcp/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/francktrouillez/airbrake-mcp/releases/tag/v0.1.3
 [0.1.2]: https://github.com/francktrouillez/airbrake-mcp/releases/tag/v0.1.2
 [0.1.1]: https://github.com/francktrouillez/airbrake-mcp/releases/tag/v0.1.1
 [0.1.0]: https://github.com/francktrouillez/airbrake-mcp/releases/tag/v0.1.0
