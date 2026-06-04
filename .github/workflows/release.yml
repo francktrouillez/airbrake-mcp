@@ -19,6 +19,9 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    # Must match the Environment configured on the npm trusted publisher,
+    # so the OIDC token's `sub` claim is repo:.../environment:npm-publish.
+    environment: npm-publish
     steps:
       - uses: actions/checkout@v4
         with:
