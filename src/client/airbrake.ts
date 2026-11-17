@@ -1,5 +1,6 @@
 import type { Config } from '../config.js';
 import { AirbrakeApiError, AirbrakeNetworkError } from './errors.js';
+import { classifyFetchError, failureHint, isRetriable, type RetryOutcome } from './retry-policy.js';
 
 export type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
 
@@ -37,10 +38,6 @@ function buildQuery(query: RequestOptions['query']): string {
   }
   const s = params.toString();
   return s ? `?${s}` : '';
-}
-
-function isRetriable(status: number): boolean {
-  return status === 429 || (status >= 500 && status < 600);
 }
 
 // Retry-After (RFC 7231 §7.1.3) is either delta-seconds or an HTTP-date.
@@ -121,19 +118,20 @@ export class AirbrakeClient {
     const init: RequestInit = { method, headers };
     if (body !== undefined) init.body = body;
 
-    // Single retry decision point: a retriable status (429/5xx) waits for
-    // Retry-After (capped) or backoff; a network error (incl. timeouts at
-    // either stage) waits for backoff. Anything else returns or throws.
+    // Single retry decision point, gated by the method-aware policy in
+    // retry-policy.ts: a retriable status waits for Retry-After (capped) or
+    // backoff; a retriable transport failure (incl. timeouts at either stage)
+    // waits for backoff. Anything else returns or throws.
     let attempt = 0;
     while (true) {
       const canRetry = attempt < this.config.maxRetries;
+      const outcome = await this.attempt(method, path, url, init, canRetry);
+      if (outcome.kind === 'done') return parseResponse(outcome, method, path);
       let delayMs: number;
-      try {
-        const outcome = await this.attempt(method, path, url, init, canRetry);
-        if (outcome.kind === 'done') return parseResponse(outcome, method, path);
+      if (outcome.kind === 'retry') {
         delayMs = statusRetryDelayMs(outcome.response, attempt);
-      } catch (err) {
-        if (!canRetry || !(err instanceof AirbrakeNetworkError)) throw err;
+      } else {
+        if (!canRetry || !isRetriable(method, outcome.failure)) throw outcome.error;
         delayMs = backoffMs(attempt);
       }
       await sleep(delayMs);
@@ -145,8 +143,8 @@ export class AirbrakeClient {
   // full body read — clearing the timer when headers arrive would let a server
   // that stalls mid-body hang the tool call forever. When the caller can retry
   // a retriable status, the body is cancelled unread (releasing the socket).
-  // Throws AirbrakeNetworkError for transport failures and timeouts at either
-  // stage, and AirbrakeApiError for an oversized body.
+  // Transport failures and timeouts at either stage come back as 'failed' with
+  // their retry classification; an oversized body throws AirbrakeApiError.
   private async attempt(
     method: HttpMethod,
     path: string,
@@ -160,7 +158,7 @@ export class AirbrakeClient {
     let response: Response | undefined;
     try {
       response = await fetch(url, { ...init, signal: controller.signal });
-      if (canRetry && isRetriable(response.status)) {
+      if (canRetry && isRetriable(method, { kind: 'status', status: response.status })) {
         await response.body?.cancel().catch(() => undefined);
         return { kind: 'retry', response };
       }
@@ -169,10 +167,15 @@ export class AirbrakeClient {
       return { kind: 'done', response, text };
     } catch (err) {
       if (response && err instanceof ResponseTooLargeError) {
-        throw new AirbrakeApiError(response.status, method, path, { message: err.message });
+        const hint = failureHint(method, { kind: 'status', status: response.status });
+        throw new AirbrakeApiError(response.status, method, path, { message: err.message }, hint);
       }
+      // After the headers arrived the server has answered, so the request
+      // was certainly sent: a body-read failure is always ambiguous.
+      const failure: RetryOutcome = response ? { kind: 'network-error' } : classifyFetchError(err);
       const cause = describeFailure(err, controller.signal.aborted, timeoutMs, response?.status);
-      throw new AirbrakeNetworkError(method, path, cause);
+      const error = new AirbrakeNetworkError(method, path, cause, failureHint(method, failure));
+      return { kind: 'failed', error, failure };
     } finally {
       clearTimeout(timer);
     }
@@ -183,7 +186,9 @@ type AttemptOutcome =
   /** Retriable status the caller will retry; body cancelled unread. */
   | { kind: 'retry'; response: Response }
   /** Final response with its fully-read body. */
-  | { kind: 'done'; response: Response; text: string };
+  | { kind: 'done'; response: Response; text: string }
+  /** Transport failure or timeout; the caller applies the retry policy. */
+  | { kind: 'failed'; error: AirbrakeNetworkError; failure: RetryOutcome };
 
 function statusRetryDelayMs(response: Response, attempt: number): number {
   const retryAfterMs = parseRetryAfter(response.headers.get('retry-after'));
@@ -205,7 +210,8 @@ function parseResponse(
     }
   }
   if (!response.ok) {
-    throw new AirbrakeApiError(response.status, method, path, parsed);
+    const hint = failureHint(method, { kind: 'status', status: response.status });
+    throw new AirbrakeApiError(response.status, method, path, parsed, hint);
   }
   return parsed;
 }

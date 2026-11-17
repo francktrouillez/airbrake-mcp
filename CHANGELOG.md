@@ -50,12 +50,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is cleared on every path. A timeout or connection failure while reading the
   body is reported as an `AirbrakeNetworkError` (previously an
   `AirbrakeApiError` carrying the HTTP status) that still names the status,
-  and is retried like any other network error. Timeout messages now state the
+  and follows the same retry policy as any other network error (see the
+  next entry). Timeout messages now state the
   duration, e.g. `request timed out after 15000ms` or
   `request timed out after 15000ms while reading the HTTP 200 response body`.
   The unread body of a 429/5xx response that is about to be retried is now
   cancelled, which releases its connection. The 25 MB body cap is unchanged
   and still surfaces as an `AirbrakeApiError`.
+- **Duplicate side effects from retried non-idempotent requests.** The client
+  retried every method on 5xx responses and network errors/timeouts, so a
+  `POST` that the server had already processed (e.g. `airbrake_notify`,
+  `airbrake_deploys` `create`, or a `POST` via `airbrake_request`) could be
+  sent again, creating duplicate notices or deploy markers. A retried `DELETE`
+  whose first response was lost would get a 404 and report failure for an
+  operation that had succeeded. 5xx responses, dropped connections and
+  timeouts (including `AIRBRAKE_TIMEOUT_MS`, and failures while reading the
+  response body) are now retried only for `GET`,
+  `HEAD` and `PUT`; `POST`, `PATCH` and `DELETE` fail immediately, with an
+  error message noting that the request may have been applied. Requests the
+  server never processed are still retried for every method:
+  `429 Too Many Requests` (honouring `Retry-After`) and connection failures
+  before anything was sent (`ECONNREFUSED`, `ENOTFOUND`, `EAI_AGAIN`, undici's
+  connect timeout, and `ENETUNREACH`/`EHOSTUNREACH`/`ETIMEDOUT` raised by
+  `connect`). If the connection retries run out, the error says the request
+  was not sent.
 
 ### Security
 

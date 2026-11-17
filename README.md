@@ -47,7 +47,7 @@ All configuration is via environment variables.
 | `AIRBRAKE_PROJECT_KEYS` | only for `airbrake_notify` | — | JSON map `{"123":"notifier_key"}` |
 | `AIRBRAKE_HOST` | no | `https://api.airbrake.io` | Override for self-hosted Airbrake or Errbit |
 | `AIRBRAKE_TIMEOUT_MS` | no | `15000` | Per-request timeout in ms (including the response body read); applies to each retry attempt |
-| `AIRBRAKE_MAX_RETRIES` | no | `2` | Retries on 429 and 5xx |
+| `AIRBRAKE_MAX_RETRIES` | no | `2` | Retries on 429 and failed connections (all methods), and on 5xx/network errors/timeouts for GET/HEAD/PUT only |
 
 Get a User API token from Airbrake → User Settings → Personal API tokens.
 
