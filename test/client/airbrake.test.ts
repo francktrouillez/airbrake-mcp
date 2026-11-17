@@ -484,6 +484,123 @@ describe('AirbrakeClient', () => {
     expect(result).toEqual({ sourcemap: { id: 'sm_1' } });
   });
 
+  describe('per-request minTimeoutMs', () => {
+    it('raises a shorter configured timeout', async () => {
+      nock('https://api.airbrake.io').get('/api/v4/projects').delay(200).reply(200, { ok: 1 });
+      const client = new AirbrakeClient({ ...baseConfig, maxRetries: 0, timeoutMs: 50 });
+      await expect(
+        client.request('GET', '/api/v4/projects', { minTimeoutMs: 5000 }),
+      ).resolves.toEqual({ ok: 1 });
+    });
+
+    it('never lowers the configured timeout', async () => {
+      nock('https://api.airbrake.io').get('/api/v4/projects').delay(200).reply(200, { ok: 1 });
+      const client = new AirbrakeClient({ ...baseConfig, maxRetries: 0, timeoutMs: 50 });
+      await expect(
+        client.request('GET', '/api/v4/projects', { minTimeoutMs: 10 }),
+      ).rejects.toBeInstanceOf(AirbrakeNetworkError);
+    });
+  });
+
+  describe('multipart upload POST follows the method-aware retry policy', () => {
+    const buildUpload = (): FormData => {
+      const form = new FormData();
+      form.append('file', new Blob(['{"version":3}'], { type: 'application/json' }), 'a.js.map');
+      return form;
+    };
+
+    it('is not re-sent after a dropped connection, and says it may have been applied', async () => {
+      const scope = nock('https://api.airbrake.io')
+        .post('/api/v4/projects/1/sourcemaps')
+        .replyWithError('ECONNRESET')
+        .post('/api/v4/projects/1/sourcemaps')
+        .reply(200, { id: 1 });
+      const err = await new AirbrakeClient(baseConfig)
+        .request('POST', '/api/v4/projects/1/sourcemaps', { body: buildUpload() })
+        .catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(AirbrakeNetworkError);
+      expect((err as Error).message).toMatch(/not retried: resending POST is unsafe/);
+      expect(scope.pendingMocks()).toHaveLength(1);
+    });
+  });
+
+  describe('FormData bodies (multipart)', () => {
+    const buildForm = (): FormData => {
+      const form = new FormData();
+      form.append('file', new Blob(['{"version":3}'], { type: 'application/json' }), 'a.js.map');
+      form.append('name', 'app.min.js');
+      return form;
+    };
+
+    it('passes FormData to fetch and lets fetch set the multipart boundary', async () => {
+      let contentType = '';
+      let body = '';
+      nock('https://api.airbrake.io', { reqheaders: { authorization: 'Bearer tok_abc' } })
+        .post('/api/v4/projects/1/sourcemaps', (b: unknown) => {
+          body = String(b);
+          return true;
+        })
+        .reply(function () {
+          contentType = String(this.req.headers['content-type']);
+          return [200, { id: 1 }];
+        });
+      const client = new AirbrakeClient(baseConfig);
+      const result = await client.request('POST', '/api/v4/projects/1/sourcemaps', {
+        body: buildForm(),
+      });
+      expect(result).toEqual({ id: 1 });
+      expect(contentType).toMatch(/^multipart\/form-data; boundary=/);
+      // Parsing succeeds only if the header's boundary matches the body.
+      const parsed = await new Response(body, {
+        headers: { 'content-type': contentType },
+      }).formData();
+      expect([...parsed.keys()]).toEqual(['file', 'name']);
+      const file = parsed.get('file') as File;
+      expect(file.name).toBe('a.js.map');
+      expect(await file.text()).toBe('{"version":3}');
+      expect(parsed.get('name')).toBe('app.min.js');
+    });
+
+    it('ignores a caller-supplied content-type so the boundary cannot mismatch', async () => {
+      let contentType = '';
+      nock('https://api.airbrake.io')
+        .post('/api/v4/projects/1/sourcemaps')
+        .reply(function () {
+          contentType = String(this.req.headers['content-type']);
+          return [200, { id: 2 }];
+        });
+      const client = new AirbrakeClient(baseConfig);
+      await client.request('POST', '/api/v4/projects/1/sourcemaps', {
+        body: buildForm(),
+        headers: { 'Content-Type': 'application/json' },
+      });
+      expect(contentType).toMatch(/^multipart\/form-data; boundary=/);
+    });
+
+    it('re-sends the complete multipart body on retry', async () => {
+      const bodies: string[] = [];
+      const record = (b: unknown): boolean => {
+        bodies.push(String(b));
+        return true;
+      };
+      nock('https://api.airbrake.io')
+        .post('/api/v4/projects/1/sourcemaps', record)
+        .reply(429, '', { 'Retry-After': '0' })
+        .post('/api/v4/projects/1/sourcemaps', record)
+        .reply(200, { id: 3 });
+      const client = new AirbrakeClient(baseConfig);
+      const result = await client.request('POST', '/api/v4/projects/1/sourcemaps', {
+        body: buildForm(),
+      });
+      expect(result).toEqual({ id: 3 });
+      expect(bodies).toHaveLength(2);
+      for (const b of bodies) {
+        expect(b).toContain('{"version":3}');
+        expect(b).toMatch(/name="name"\r\n\r\napp\.min\.js\r\n/);
+      }
+    });
+  });
+
   it('supports custom headers and no-auth mode (for notify path)', async () => {
     nock('https://api.airbrake.io', { reqheaders: { 'x-custom': 'v' } })
       .post('/api/v3/projects/1/notices')

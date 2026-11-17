@@ -1,6 +1,6 @@
 {
   "name": "airbrake_sourcemaps",
-  "description": "Airbrake source maps: list, get, delete. sourcemap_id MUST be passed as a string. Upload (POST) is multipart/form-data and not modeled here; use airbrake_request with a pre-formed multipart body and matching Content-Type. List results include `_pagination.has_more`/`next_page`. Returns the raw Airbrake JSON payload — no data is removed unless list is given `fields` (keeps only those top-level keys per item).",
+  "description": "Airbrake source maps: list, get, delete, upload. sourcemap_id MUST be passed as a string. upload reads a LOCAL source map from file_path (see its constraints; anything else is rejected before any request) and POSTs it as multipart/form-data with name (the minified file URL it applies to) and optional pattern (SQL LIKE pattern for minified file URLs). A failed upload is never re-sent automatically; if its error says it may have been applied, check list before uploading again. List results include `_pagination.has_more`/`next_page`. Returns the raw Airbrake JSON payload — no data is removed unless list is given `fields` (keeps only those top-level keys per item).",
   "inputSchema": {
     "type": "object",
     "properties": {
@@ -9,7 +9,8 @@
         "enum": [
           "list",
           "get",
-          "delete"
+          "delete",
+          "upload"
         ]
       },
       "fields": {
@@ -40,6 +41,24 @@
       "sourcemap_id": {
         "type": "string",
         "pattern": "^\\d+$"
+      },
+      "file_path": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4096,
+        "description": "Absolute local path to the source map. Must end in .map and resolve (symlinks followed) to a regular *.map file of at most 50 MiB containing source map v3 JSON."
+      },
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 2048,
+        "description": "Minified file URL or name this map applies to, e.g. https://cdn.example.com/app.min.js"
+      },
+      "pattern": {
+        "description": "Optional SQL LIKE pattern matching minified file URLs, e.g. %/app.min.js",
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 2048
       }
     },
     "additionalProperties": false,

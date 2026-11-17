@@ -107,7 +107,7 @@ To enable the notifier (sending errors TO Airbrake), add the project keys map:
 | `airbrake_deploys` | `list`, `get`, `create` | All documented. |
 | `airbrake_performance` | `routes_stats`, `queries_stats`, `queues_stats` | v5 APM. All actions require `time__gte`/`time__lt`/`period` (`minute`\|`hour`\|`day`). **`queries_stats` additionally requires a `route` filter** and **`queues_stats` additionally requires a `queue` filter** — the server returns 400 without them. The GET (read) side of these endpoints is not in Airbrake's public docs (which only show the PUT ingest side) but is live-verified working on hosted Airbrake. `routes-breakdowns` is intentionally not modeled (PUT-only SDK endpoint). |
 | `airbrake_notify` | `notify` | Sends errors TO Airbrake (v3 Notifier API). |
-| `airbrake_sourcemaps` | `list`, `get`, `delete` | Upload is multipart/form-data — use `airbrake_request` with a pre-formed multipart body. |
+| `airbrake_sourcemaps` | `list`, `get`, `delete`, `upload` | `upload` reads a local source map file and POSTs it as multipart/form-data — see [Source-map upload](#source-map-upload). |
 | `airbrake_request` | `request` | Escape hatch for any endpoint. Supports `auth: 'none'` (project-key endpoints), raw string bodies (multipart), arbitrary headers and query. |
 
 Tools return raw Airbrake JSON payloads with no field-stripping by default. List actions add a `_pagination` metadata object so the model can iterate pages.
@@ -132,6 +132,32 @@ Airbrake's group/notice/deploy/sourcemap IDs are **19-digit snowflakes** that ex
 
 The schemas reject numeric IDs explicitly; you'll see a clear zod error if you try. Project IDs are small integers and can be passed as numbers as usual.
 
+### Source-map upload
+
+```json
+{
+  "action": "upload",
+  "project_id": 123,
+  "file_path": "/abs/path/to/dist/app.min.js.map",
+  "name": "https://cdn.example.com/app.min.js",
+  "pattern": "%/app.min.js"
+}
+```
+
+`name` is the minified file URL (or name) the map applies to; `pattern` is an optional SQL `LIKE` pattern matching minified file URLs. The server reads the file itself and builds the multipart request (`file`, `name`, `pattern` parts) — no hand-built multipart body is needed.
+
+Because this action reads a file from the machine running the MCP server and sends it to the Airbrake host, it is locked down so a prompt-injected model cannot use it to exfiltrate arbitrary files. All of the following are enforced **before any HTTP request is made**:
+
+- `file_path` must be absolute and its own file name must end in `.map` (case-insensitive). This is checked before the filesystem is touched, so the tool cannot be used to probe whether arbitrary files exist; missing and unreadable paths get the same error. On Windows, network (UNC, `\\host\share`) and device (`\\?\`, `\\.\`) paths are rejected outright, since merely resolving a UNC path sends the user's NTLM credentials to that host.
+- It must resolve (via `realpath`, following every symlink) to a **regular file** — directories, devices, FIFOs and sockets are rejected — whose **resolved** name also ends in `.map`. A symlink `bundle.js.map → ~/.ssh/id_rsa` is rejected.
+- The file must be at most **50 MiB**, checked via `lstat` before it is read. The open handle is re-checked (same inode, still within the cap) so a file swapped after the check is not read.
+- The content must parse as JSON and look like a **source map v3**: `version === 3`, `mappings` is a string, and `sources` (if present) is an array of strings or `null`s. Index maps (`sections`) are not accepted. This content check is also what stops a hard link named `*.map` that points at a secret.
+- `name` and `pattern` are trimmed, then must be non-empty, at most 2048 characters, and contain no CR/LF.
+
+Rejection messages never include the resolved target path or any file content.
+
+Each upload attempt gets at least 55 s (or `AIRBRAKE_TIMEOUT_MS`, if larger) — long enough for large maps, while a single attempt stays under the 60 s default request timeout of MCP SDK clients. Because POST is not idempotent, an upload is **not** retried after a network error, a timeout, or any 5xx (Airbrake may already have stored it); only 429 and connection failures before anything was sent are retried, per `AIRBRAKE_MAX_RETRIES`. After an ambiguous failure the error says so — check with `list` before uploading again.
+
 ### Pagination params
 
 Airbrake accepts both `limit` and `per_page` on list endpoints. This MCP standardizes on `page` + `per_page` for consistency across all list actions.
@@ -153,7 +179,7 @@ If Airbrake returns neither `count` nor a list, `has_more`/`next_page` are omitt
 
 - **Project updates are not exposed.** The `PUT /api/v4/projects/:id` endpoint requires dashboard-session credentials (cookies + CSRF), not Personal API tokens, and returns 401 from every token shape we tested. Use the Airbrake dashboard to change project settings.
 - **`airbrake_notices.get`** calls an undocumented endpoint. It works on hosted Airbrake today but is not part of the public contract — may break or differ on self-hosted instances and Errbit.
-- **Source-map upload (`POST /api/v4/projects/:pid/sourcemaps`)** requires multipart/form-data. The escape hatch supports it via raw string body + a `Content-Type: multipart/form-data; boundary=…` header; constructing the multipart body is the caller's responsibility.
+- **Source-map upload auth.** Airbrake's docs list project-key or user-key auth for `POST /api/v4/projects/:pid/sourcemaps`; `airbrake_sourcemaps` `upload` sends the same `Authorization: Bearer <AIRBRAKE_USER_TOKEN>` as every other management call.
 - **`POST /api/v3/projects/:pid/ios-reports`** (iOS crash reports) requires `?key=PROJECT_KEY` and no `Authorization` header. Call via `airbrake_request` with `auth: 'none'` and pass the project key in `query`.
 - **APM write endpoints** (`PUT /api/v5/.../routes-stats` etc.) are SDK-internal; not modeled, but reachable via the escape hatch.
 - **What this MCP intentionally doesn't model:** the Airbrake dashboard exposes endpoints for comments, bookmarks, iframes, personal tokens, project stats, and a cross-project `/api/v4/groups` listing — these all returned 404/401 against hosted Airbrake from a User API token. They were modeled in earlier versions and removed. If your instance does support them, reach for `airbrake_request`.

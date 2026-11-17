@@ -19,7 +19,7 @@ const EXPECTED_ACTIONS: Record<string, string[]> = {
   airbrake_deploys: ['list', 'get', 'create'],
   airbrake_performance: ['routes_stats', 'queries_stats', 'queues_stats'],
   airbrake_notify: ['notify'],
-  airbrake_sourcemaps: ['list', 'get', 'delete'],
+  airbrake_sourcemaps: ['list', 'get', 'delete', 'upload'],
 };
 
 const PAGINATED = [
