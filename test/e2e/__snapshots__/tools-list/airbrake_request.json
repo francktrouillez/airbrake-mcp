@@ -2,6 +2,7 @@
   "name": "airbrake_request",
   "description": "Escape hatch: send a raw request to any Airbrake API endpoint. Use when no resource-specific tool covers what you need, or for project-key / multipart endpoints. Returns the raw Airbrake JSON payload — no data is removed.",
   "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
     "type": "object",
     "properties": {
       "method": {
@@ -16,7 +17,7 @@
       },
       "path": {
         "type": "string",
-        "pattern": "^\\/api\\/",
+        "pattern": "^\\/api\\/.*",
         "description": "Airbrake API path, e.g. /api/v4/projects/123/groups"
       },
       "query": {
@@ -39,19 +40,18 @@
         }
       },
       "auth": {
+        "description": "'bearer' (default) sends AIRBRAKE_USER_TOKEN as Bearer auth. 'none' omits Authorization — required for project-key endpoints like the v3 notifier and iOS reports.",
         "type": "string",
         "enum": [
           "bearer",
           "none"
-        ],
-        "description": "'bearer' (default) sends AIRBRAKE_USER_TOKEN as Bearer auth. 'none' omits Authorization — required for project-key endpoints like the v3 notifier and iOS reports."
+        ]
       }
     },
     "required": [
       "method",
       "path"
     ],
-    "additionalProperties": false,
-    "$schema": "http://json-schema.org/draft-07/schema#"
+    "additionalProperties": false
   }
 }

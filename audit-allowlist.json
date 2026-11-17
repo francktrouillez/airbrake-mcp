@@ -5,12 +5,5 @@
     "scope": "dev",
     "reason": "ReDoS via crafted extglob patterns. Dev-only (vitest, vite, tinyglobby, fdir, typescript-eslint); it only ever matches this repo's own glob config, never user input, and is not in the published dependency tree. No patched release exists (affects <=4.0.7, the latest).",
     "expires": "2027-02-17"
-  },
-  {
-    "id": "GHSA-mrhx-c7xc-m3w5",
-    "package": "zod",
-    "scope": "runtime",
-    "reason": "Memory exhaustion when validating oversized constrained collections. Ships at runtime (validates tool-call arguments from the local MCP client). Fixed only in zod 4.6.6+, which is the zod 4 migration PR; remove this entry when that merges (the audit fails on stale entries).",
-    "expires": "2027-01-17"
   }
 ]

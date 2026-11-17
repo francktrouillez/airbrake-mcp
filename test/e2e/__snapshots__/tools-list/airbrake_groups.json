@@ -38,36 +38,36 @@
         "pattern": "^\\d+$"
       },
       "start_time": {
-        "type": "string",
-        "description": "ISO 8601 timestamp lower bound"
+        "description": "ISO 8601 timestamp lower bound",
+        "type": "string"
       },
       "end_time": {
-        "type": "string",
-        "description": "ISO 8601 timestamp upper bound"
+        "description": "ISO 8601 timestamp upper bound",
+        "type": "string"
       },
       "order": {
+        "description": "Sort order for the result set",
         "type": "string",
         "enum": [
           "last_notice",
           "notice_count",
           "weight",
           "created"
-        ],
-        "description": "Sort order for the result set"
+        ]
       },
       "query": {
         "type": "string"
       },
       "page": {
+        "default": 1,
         "type": "integer",
-        "exclusiveMinimum": 0,
-        "default": 1
+        "exclusiveMinimum": 0
       },
       "per_page": {
+        "default": 50,
         "type": "integer",
         "minimum": 1,
-        "maximum": 200,
-        "default": 50
+        "maximum": 200
       },
       "group_id": {
         "type": "string",

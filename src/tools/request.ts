@@ -30,14 +30,14 @@ const headerValueSchema = z
 const inputSchema = z.object({
   method: z.enum(['GET', 'POST', 'PATCH', 'PUT', 'DELETE']),
   path: pathSchema,
-  query: z.record(z.union([z.string(), z.number(), z.boolean()])).optional(),
+  query: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
   body: z
     .unknown()
     .optional()
     .describe(
       'Request body. Objects are JSON-serialized; strings are sent verbatim (use this for multipart/form-data or other non-JSON payloads — set the matching Content-Type in headers).',
     ),
-  headers: z.record(headerValueSchema).optional(),
+  headers: z.record(z.string(), headerValueSchema).optional(),
   auth: z
     .enum(['bearer', 'none'])
     .optional()

@@ -13,15 +13,15 @@
         ]
       },
       "page": {
+        "default": 1,
         "type": "integer",
-        "exclusiveMinimum": 0,
-        "default": 1
+        "exclusiveMinimum": 0
       },
       "per_page": {
+        "default": 50,
         "type": "integer",
         "minimum": 1,
-        "maximum": 200,
-        "default": 50
+        "maximum": 200
       },
       "project_id": {
         "type": "integer",

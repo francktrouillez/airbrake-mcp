@@ -11,7 +11,7 @@ const inputSchema = z.discriminatedUnion('action', [
       group_id: snowflakeId,
       version: z.string().optional().describe('Filter notices by deploy/app version'),
     })
-    .merge(pageSchema),
+    .extend(pageSchema.shape),
   z.object({
     action: z.literal('get'),
     project_id: projectId,

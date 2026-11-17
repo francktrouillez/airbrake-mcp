@@ -4,7 +4,7 @@ import { pageSchema, projectId, snowflakeId } from './schemas.js';
 import type { ToolDefinition } from './types.js';
 
 const inputSchema = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('list'), project_id: projectId }).merge(pageSchema),
+  z.object({ action: z.literal('list'), project_id: projectId }).extend(pageSchema.shape),
   z.object({
     action: z.literal('get'),
     project_id: projectId,

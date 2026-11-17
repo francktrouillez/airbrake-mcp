@@ -26,17 +26,17 @@ const inputSchema = z.discriminatedUnion('action', [
         .describe('Sort order for the result set'),
       query: z.string().optional(),
     })
-    .merge(pageSchema),
-  z.object({ action: z.literal('get') }).merge(groupRef),
+    .extend(pageSchema.shape),
+  z.object({ action: z.literal('get') }).extend(groupRef.shape),
   z
     .object({ action: z.literal('get_stats') })
-    .merge(statsTimeRange)
-    .merge(groupRef),
-  z.object({ action: z.literal('resolve') }).merge(groupRef),
-  z.object({ action: z.literal('unresolve') }).merge(groupRef),
-  z.object({ action: z.literal('mute') }).merge(groupRef),
-  z.object({ action: z.literal('unmute') }).merge(groupRef),
-  z.object({ action: z.literal('delete') }).merge(groupRef),
+    .extend(statsTimeRange.shape)
+    .extend(groupRef.shape),
+  z.object({ action: z.literal('resolve') }).extend(groupRef.shape),
+  z.object({ action: z.literal('unresolve') }).extend(groupRef.shape),
+  z.object({ action: z.literal('mute') }).extend(groupRef.shape),
+  z.object({ action: z.literal('unmute') }).extend(groupRef.shape),
+  z.object({ action: z.literal('delete') }).extend(groupRef.shape),
 ]);
 
 export const groupsTool: ToolDefinition<typeof inputSchema> = {
