@@ -41,6 +41,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Clients that parsed the old JSON error array should match on the text
   instead.
 
+### Fixed
+
+- **`AIRBRAKE_TIMEOUT_MS` now covers the response body.** The timeout was
+  cleared as soon as response headers arrived, so a server that sent headers
+  and then stalled mid-body hung the tool call forever. The deadline now
+  spans the whole attempt (connect, headers and full body read) and the timer
+  is cleared on every path. A timeout or connection failure while reading the
+  body is reported as an `AirbrakeNetworkError` (previously an
+  `AirbrakeApiError` carrying the HTTP status) that still names the status,
+  and is retried like any other network error. Timeout messages now state the
+  duration, e.g. `request timed out after 15000ms` or
+  `request timed out after 15000ms while reading the HTTP 200 response body`.
+  The unread body of a 429/5xx response that is about to be retried is now
+  cancelled, which releases its connection. The 25 MB body cap is unchanged
+  and still surfaces as an `AirbrakeApiError`.
+
 ### Security
 
 - Raised the `@modelcontextprotocol/sdk` floor from `^1.0.0` to `^1.32.0`

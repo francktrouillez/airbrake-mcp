@@ -12,6 +12,14 @@ export const MAX_RETRY_DELAY_MS = 60_000;
 // the largest realistic Airbrake list response.
 export const MAX_RESPONSE_BYTES = 25 * 1024 * 1024;
 
+/** The response body exceeded the size cap (see MAX_RESPONSE_BYTES). */
+export class ResponseTooLargeError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ResponseTooLargeError';
+  }
+}
+
 export interface RequestOptions {
   query?: Record<string, string | number | boolean | undefined>;
   body?: unknown;
@@ -110,60 +118,116 @@ export class AirbrakeClient {
       }
     }
 
+    const init: RequestInit = { method, headers };
+    if (body !== undefined) init.body = body;
+
+    // Single retry decision point: a retriable status (429/5xx) waits for
+    // Retry-After (capped) or backoff; a network error (incl. timeouts at
+    // either stage) waits for backoff. Anything else returns or throws.
     let attempt = 0;
     while (true) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), this.config.timeoutMs);
-      let response: Response;
+      const canRetry = attempt < this.config.maxRetries;
+      let delayMs: number;
       try {
-        const init: RequestInit = { method, headers, signal: controller.signal };
-        if (body !== undefined) init.body = body;
-        response = await fetch(url, init);
+        const outcome = await this.attempt(method, path, url, init, canRetry);
+        if (outcome.kind === 'done') return parseResponse(outcome, method, path);
+        delayMs = statusRetryDelayMs(outcome.response, attempt);
       } catch (err) {
-        clearTimeout(timer);
-        if (attempt < this.config.maxRetries) {
-          await sleep(backoffMs(attempt));
-          attempt++;
-          continue;
-        }
-        throw new AirbrakeNetworkError(method, path, err);
+        if (!canRetry || !(err instanceof AirbrakeNetworkError)) throw err;
+        delayMs = backoffMs(attempt);
       }
-      clearTimeout(timer);
-
-      if (isRetriable(response.status) && attempt < this.config.maxRetries) {
-        const retryAfterMs = parseRetryAfter(response.headers.get('retry-after'));
-        const rawDelay = retryAfterMs !== null ? retryAfterMs : backoffMs(attempt);
-        const delay = Math.min(MAX_RETRY_DELAY_MS, rawDelay);
-        await sleep(delay);
-        attempt++;
-        continue;
-      }
-
-      let text = '';
-      if (response.status !== 204) {
-        try {
-          text = await readBodyWithLimit(response, MAX_RESPONSE_BYTES);
-        } catch (err) {
-          throw new AirbrakeApiError(response.status, method, path, {
-            message: err instanceof Error ? err.message : String(err),
-          });
-        }
-      }
-      let parsed: unknown = null;
-      if (text.length > 0) {
-        try {
-          parsed = JSON.parse(text);
-        } catch {
-          parsed = text;
-        }
-      }
-
-      if (!response.ok) {
-        throw new AirbrakeApiError(response.status, method, path, parsed);
-      }
-      return parsed;
+      await sleep(delayMs);
+      attempt++;
     }
   }
+
+  // One HTTP attempt under a single deadline covering connect, headers and the
+  // full body read — clearing the timer when headers arrive would let a server
+  // that stalls mid-body hang the tool call forever. When the caller can retry
+  // a retriable status, the body is cancelled unread (releasing the socket).
+  // Throws AirbrakeNetworkError for transport failures and timeouts at either
+  // stage, and AirbrakeApiError for an oversized body.
+  private async attempt(
+    method: HttpMethod,
+    path: string,
+    url: string,
+    init: RequestInit,
+    canRetry: boolean,
+  ): Promise<AttemptOutcome> {
+    const { timeoutMs } = this.config;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    let response: Response | undefined;
+    try {
+      response = await fetch(url, { ...init, signal: controller.signal });
+      if (canRetry && isRetriable(response.status)) {
+        await response.body?.cancel().catch(() => undefined);
+        return { kind: 'retry', response };
+      }
+      const text =
+        response.status === 204 ? '' : await readBodyWithLimit(response, MAX_RESPONSE_BYTES);
+      return { kind: 'done', response, text };
+    } catch (err) {
+      if (response && err instanceof ResponseTooLargeError) {
+        throw new AirbrakeApiError(response.status, method, path, { message: err.message });
+      }
+      const cause = describeFailure(err, controller.signal.aborted, timeoutMs, response?.status);
+      throw new AirbrakeNetworkError(method, path, cause);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+}
+
+type AttemptOutcome =
+  /** Retriable status the caller will retry; body cancelled unread. */
+  | { kind: 'retry'; response: Response }
+  /** Final response with its fully-read body. */
+  | { kind: 'done'; response: Response; text: string };
+
+function statusRetryDelayMs(response: Response, attempt: number): number {
+  const retryAfterMs = parseRetryAfter(response.headers.get('retry-after'));
+  return Math.min(MAX_RETRY_DELAY_MS, retryAfterMs ?? backoffMs(attempt));
+}
+
+function parseResponse(
+  outcome: { response: Response; text: string },
+  method: HttpMethod,
+  path: string,
+): unknown {
+  const { response, text } = outcome;
+  let parsed: unknown = null;
+  if (text.length > 0) {
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      parsed = text;
+    }
+  }
+  if (!response.ok) {
+    throw new AirbrakeApiError(response.status, method, path, parsed);
+  }
+  return parsed;
+}
+
+// The cause for an AirbrakeNetworkError. A timeout states the deadline; a
+// failure after the headers arrived names the HTTP status, which would
+// otherwise be lost. A fetch-stage transport error is passed through as is.
+function describeFailure(
+  err: unknown,
+  timedOut: boolean,
+  timeoutMs: number,
+  status: number | undefined,
+): unknown {
+  const reason = timedOut
+    ? `request timed out after ${timeoutMs}ms`
+    : err instanceof Error
+      ? err.message
+      : String(err);
+  if (status !== undefined) {
+    return new Error(`${reason} while reading the HTTP ${status} response body`, { cause: err });
+  }
+  return timedOut ? new Error(reason, { cause: err }) : err;
 }
 
 // Reads the body via a streaming reader and aborts if it exceeds `max` bytes.
@@ -175,7 +239,7 @@ export async function readBodyWithLimit(response: Response, max: number): Promis
   if (cl !== null) {
     const n = Number(cl);
     if (Number.isFinite(n) && n > max) {
-      throw new Error(`response body exceeds ${max} bytes (Content-Length: ${n})`);
+      throw new ResponseTooLargeError(`response body exceeds ${max} bytes (Content-Length: ${n})`);
     }
   }
   if (!response.body) return '';
@@ -189,7 +253,7 @@ export async function readBodyWithLimit(response: Response, max: number): Promis
       total += value.byteLength;
       if (total > max) {
         await reader.cancel();
-        throw new Error(`response body exceeds ${max} bytes`);
+        throw new ResponseTooLargeError(`response body exceeds ${max} bytes`);
       }
       chunks.push(value);
     }
