@@ -5,6 +5,19 @@ on:
   pull_request:
 
 jobs:
+  # Dependency audit gate (README → Dependency audit). Its own job: it reads
+  # only package-lock.json, so it runs before any install (no dependency code
+  # can tamper with it), runs once rather than per Node version, and a new
+  # advisory doesn't hide the lint/test results below.
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/audit.mjs
+
   test:
     runs-on: ubuntu-latest
     strategy:
@@ -17,7 +30,6 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
-      - run: npm audit --audit-level=high
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test

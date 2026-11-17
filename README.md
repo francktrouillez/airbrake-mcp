@@ -141,7 +141,24 @@ npm run lint
 npm run build            # emits dist/
 npm run validate         # spawns the built server, checks tool schemas (expects 8 tools)
 npm run dev              # tsx src/bin.ts (for local stdio testing)
+npm run audit:ci         # dependency audit gate (what CI runs)
 ```
+
+### Dependency audit
+
+CI runs `node scripts/audit.mjs` (also available as `npm run audit:ci`) instead of a bare `npm audit`. It audits `package-lock.json` only (`--package-lock-only`), so it runs in its own job **before** any install, and no dependency's install script can tamper with it. Dev, optional and peer dependencies are always included, whatever `NODE_ENV` or `.npmrc` says.
+
+It fails on any **high or critical** advisory unless [`audit-allowlist.json`](audit-allowlist.json) has a matching entry, and each entry has to justify itself:
+
+- **`scope`** is `dev` or `runtime`. A `dev` entry only covers an advisory that is absent from the shipped tree (`npm audit --omit=dev`), so a dev-tooling exception can never hide a vulnerability users install. `runtime` entries should be rare and short-lived.
+- **`package`** must name the package npm reports the advisory against, and only covers it if that's the *only* package hit. The GHSA id alone isn't enough, so a mislabeled entry can't get waved through in review.
+- **`reason`** says why it's acceptable for now, and what removes it.
+- **`expires`** (`YYYY-MM-DD`): the gate fails after that date, and also when the date is more than **180 days** out for `dev` or **90 days** for `runtime`. Nothing can be waved through indefinitely.
+- **Stale entries fail too.** Once an entry covers nothing, because the advisory was fixed upstream or the dependency was bumped, the gate asks for it to be removed. The list can only shrink back to empty.
+
+If npm's report format ever changes such that a high/critical package can't be matched to an advisory, the gate errors (exit 2) instead of reading it as a clean tree.
+
+Moderate and low advisories don't block CI. Check `npm audit` locally from time to time.
 
 ## Contributing
 

@@ -32,11 +32,13 @@ jobs:
           node-version: 22
           registry-url: https://registry.npmjs.org
 
-      - run: npm ci
-
       # ci.yml triggers on push-to-main / PRs, not on release events,
       # so run the full quality gate here before publishing.
-      - run: npm audit --audit-level=high
+      # Dependency audit first, before any install (README → Dependency audit).
+      - run: node scripts/audit.mjs
+
+      - run: npm ci
+
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
