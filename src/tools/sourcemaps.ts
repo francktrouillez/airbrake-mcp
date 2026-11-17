@@ -1,29 +1,19 @@
 import { z } from 'zod';
 import { withPagination } from '../client/pagination.js';
+import { pageSchema, projectId, snowflakeId } from './schemas.js';
 import type { ToolDefinition } from './types.js';
 
-const pageSchema = z.object({
-  page: z.number().int().positive().default(1),
-  per_page: z.number().int().min(1).max(200).default(50),
-});
-
-// Sourcemap IDs may be snowflakes — pass as string to avoid precision loss.
-// Digits-only regex prevents path traversal via URL-normalized `..` segments.
-const sourcemapId = z.string().regex(/^\d+$/, 'must be a numeric snowflake ID (digits only)');
-
 const inputSchema = z.discriminatedUnion('action', [
-  z
-    .object({ action: z.literal('list'), project_id: z.number().int().positive() })
-    .merge(pageSchema),
+  z.object({ action: z.literal('list'), project_id: projectId }).merge(pageSchema),
   z.object({
     action: z.literal('get'),
-    project_id: z.number().int().positive(),
-    sourcemap_id: sourcemapId,
+    project_id: projectId,
+    sourcemap_id: snowflakeId,
   }),
   z.object({
     action: z.literal('delete'),
-    project_id: z.number().int().positive(),
-    sourcemap_id: sourcemapId,
+    project_id: projectId,
+    sourcemap_id: snowflakeId,
   }),
 ]);
 

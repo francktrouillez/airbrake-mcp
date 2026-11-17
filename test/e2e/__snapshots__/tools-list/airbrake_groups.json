@@ -1,0 +1,100 @@
+{
+  "name": "airbrake_groups",
+  "description": "Airbrake error groups (issues). Actions: list with filters, get, mute, unmute, delete, get_stats (v5 time-series; requires time__gte/time__lt/period). resolve/unresolve follow the mute/unmute PUT convention but are not in the public docs — fall back to airbrake_request if they fail on your instance. group_id and deploy_id MUST be passed as strings (they are 19-digit snowflakes that lose precision as JS numbers). Returns the raw Airbrake JSON payload — no data is removed.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": [
+          "list",
+          "get",
+          "get_stats",
+          "resolve",
+          "unresolve",
+          "mute",
+          "unmute",
+          "delete"
+        ]
+      },
+      "project_id": {
+        "type": "integer",
+        "exclusiveMinimum": 0
+      },
+      "environment": {
+        "type": "string"
+      },
+      "resolved": {
+        "type": "boolean"
+      },
+      "muted": {
+        "type": "boolean"
+      },
+      "archived": {
+        "type": "boolean"
+      },
+      "deploy_id": {
+        "type": "string",
+        "pattern": "^\\d+$"
+      },
+      "start_time": {
+        "type": "string",
+        "description": "ISO 8601 timestamp lower bound"
+      },
+      "end_time": {
+        "type": "string",
+        "description": "ISO 8601 timestamp upper bound"
+      },
+      "order": {
+        "type": "string",
+        "enum": [
+          "last_notice",
+          "notice_count",
+          "weight",
+          "created"
+        ],
+        "description": "Sort order for the result set"
+      },
+      "query": {
+        "type": "string"
+      },
+      "page": {
+        "type": "integer",
+        "exclusiveMinimum": 0,
+        "default": 1
+      },
+      "per_page": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 200,
+        "default": 50
+      },
+      "group_id": {
+        "type": "string",
+        "pattern": "^\\d+$"
+      },
+      "time__gte": {
+        "type": "string",
+        "description": "ISO 8601 timestamp lower bound (required)"
+      },
+      "time__lt": {
+        "type": "string",
+        "description": "ISO 8601 timestamp upper bound (required)"
+      },
+      "period": {
+        "type": "string",
+        "enum": [
+          "minute",
+          "hour",
+          "day"
+        ],
+        "description": "Bucket granularity (required)"
+      }
+    },
+    "additionalProperties": false,
+    "required": [
+      "action",
+      "project_id"
+    ]
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "name": "airbrake_notices",
+  "description": "Airbrake notices (individual error occurrences). list and get_status are documented; get hits an undocumented dashboard endpoint that currently works on hosted Airbrake. group_id and notice_id MUST be passed as strings (19-digit snowflakes). Returns the raw Airbrake JSON payload — no data is removed.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": [
+          "list",
+          "get",
+          "get_status"
+        ]
+      },
+      "project_id": {
+        "type": "integer",
+        "exclusiveMinimum": 0
+      },
+      "group_id": {
+        "type": "string",
+        "pattern": "^\\d+$"
+      },
+      "version": {
+        "type": "string",
+        "description": "Filter notices by deploy/app version"
+      },
+      "page": {
+        "type": "integer",
+        "exclusiveMinimum": 0,
+        "default": 1
+      },
+      "per_page": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 200,
+        "default": 50
+      },
+      "notice_id": {
+        "type": "string",
+        "pattern": "^\\d+$"
+      },
+      "notice_uuid": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9-]+$",
+        "description": "UUID returned when the notice was first reported"
+      }
+    },
+    "additionalProperties": false,
+    "required": [
+      "action",
+      "project_id"
+    ]
+  }
+}

@@ -1,39 +1,26 @@
 import { z } from 'zod';
 import { withPagination } from '../client/pagination.js';
+import { noticeUuid, pageSchema, projectId, snowflakeId } from './schemas.js';
 import type { ToolDefinition } from './types.js';
-
-const pageSchema = z.object({
-  page: z.number().int().positive().default(1),
-  per_page: z.number().int().min(1).max(200).default(50),
-});
-
-// Group/notice IDs are 19-digit snowflakes — must be strings (see groups.ts).
-// Digits-only regex prevents path traversal via URL-normalized `..` segments.
-const snowflakeId = z.string().regex(/^\d+$/, 'must be a numeric snowflake ID (digits only)');
-// Notice UUIDs returned by Airbrake are alphanumerics + hyphens; restrict
-// to that shape so `..` / `/` cannot escape the path segment.
-const noticeUuid = z
-  .string()
-  .regex(/^[A-Za-z0-9-]+$/, 'must contain only alphanumerics and hyphens');
 
 const inputSchema = z.discriminatedUnion('action', [
   z
     .object({
       action: z.literal('list'),
-      project_id: z.number().int().positive(),
+      project_id: projectId,
       group_id: snowflakeId,
       version: z.string().optional().describe('Filter notices by deploy/app version'),
     })
     .merge(pageSchema),
   z.object({
     action: z.literal('get'),
-    project_id: z.number().int().positive(),
+    project_id: projectId,
     group_id: snowflakeId,
     notice_id: snowflakeId,
   }),
   z.object({
     action: z.literal('get_status'),
-    project_id: z.number().int().positive(),
+    project_id: projectId,
     notice_uuid: noticeUuid.describe('UUID returned when the notice was first reported'),
   }),
 ]);
