@@ -1,5 +1,6 @@
 {
   "name": "airbrake_notices",
+  "title": "Read Airbrake notices",
   "description": "Airbrake notices (individual error occurrences). list and get_status are documented; get hits an undocumented dashboard endpoint that currently works on hosted Airbrake. group_id and notice_id MUST be passed as strings (19-digit snowflakes). List results include `_pagination.has_more`/`next_page`. Returns the raw Airbrake JSON payload — no data is removed unless list is given `fields` (keeps only those top-level keys per item).",
   "inputSchema": {
     "type": "object",
@@ -60,5 +61,12 @@
       "action",
       "project_id"
     ]
+  },
+  "annotations": {
+    "title": "Read Airbrake notices",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": true
   }
 }

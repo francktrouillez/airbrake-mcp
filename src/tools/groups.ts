@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { PAGINATION_HINT } from '../client/pagination.js';
 import { fieldsSchema, listResult } from './fields.js';
+import { assertNotMovedAction } from './moved-actions.js';
+import { READ_ONLY_HINTS } from './read-only.js';
 import { pageSchema, projectId, snowflakeId } from './schemas.js';
 import type { ToolDefinition } from './types.js';
 
@@ -118,11 +120,6 @@ const inputSchema = z
           .describe('Maximum number of buckets to return (optional; Airbrake defaults to 100)'),
       })
       .extend(groupRef.shape),
-    z.object({ action: z.literal('resolve') }).extend(groupRef.shape),
-    z.object({ action: z.literal('unresolve') }).extend(groupRef.shape),
-    z.object({ action: z.literal('mute') }).extend(groupRef.shape),
-    z.object({ action: z.literal('unmute') }).extend(groupRef.shape),
-    z.object({ action: z.literal('delete') }).extend(groupRef.shape),
   ])
   // Cross-field check on the whole union: discriminatedUnion branches must be
   // plain objects, so a per-branch refine is not possible.
@@ -137,11 +134,22 @@ const inputSchema = z
     }
   });
 
+const MOVED_ACTIONS = {
+  mute: 'airbrake_groups_update',
+  unmute: 'airbrake_groups_update',
+  resolve: 'airbrake_groups_update',
+  unresolve: 'airbrake_groups_update',
+  delete: 'airbrake_delete with resource "group"',
+};
+
 export const groupsTool: ToolDefinition<typeof inputSchema> = {
   name: 'airbrake_groups',
-  description: `Airbrake error groups (issues). Actions: list with filters, get, mute, unmute, delete, get_stats (v5 time-series; requires time__gte and period, optional time__lt (defaults to now) and limit; times are Unix seconds or ISO 8601). resolve/unresolve follow the mute/unmute PUT convention but are not in the public docs — fall back to airbrake_request if they fail on your instance. group_id and deploy_id MUST be passed as strings (they are 19-digit snowflakes that lose precision as JS numbers). ${PAGINATION_HINT} Returns the raw Airbrake JSON payload — no data is removed unless list is given \`fields\` (keeps only those top-level keys per item).`,
+  title: 'Read Airbrake error groups',
+  description: `Read Airbrake error groups (issues). Actions: list with filters, get, get_stats (v5 time-series; requires time__gte and period, optional time__lt (defaults to now) and limit; times are Unix seconds or ISO 8601). Read-only — to mute/unmute/resolve/unresolve use airbrake_groups_update; to delete use airbrake_delete with resource "group". group_id and deploy_id MUST be passed as strings (they are 19-digit snowflakes that lose precision as JS numbers). ${PAGINATION_HINT} Returns the raw Airbrake JSON payload — no data is removed unless list is given \`fields\` (keeps only those top-level keys per item).`,
+  annotations: READ_ONLY_HINTS,
   inputSchema,
   handler: async (ctx, input) => {
+    assertNotMovedAction('airbrake_groups', input, MOVED_ACTIONS, ctx.config.readOnly);
     const parsed = inputSchema.parse(input);
     switch (parsed.action) {
       case 'list': {
@@ -184,31 +192,6 @@ export const groupsTool: ToolDefinition<typeof inputSchema> = {
               limit: parsed.limit,
             },
           },
-        );
-      case 'mute':
-        return ctx.client.request(
-          'PUT',
-          `/api/v4/projects/${parsed.project_id}/groups/${parsed.group_id}/muted`,
-        );
-      case 'unmute':
-        return ctx.client.request(
-          'PUT',
-          `/api/v4/projects/${parsed.project_id}/groups/${parsed.group_id}/unmuted`,
-        );
-      case 'resolve':
-        return ctx.client.request(
-          'PUT',
-          `/api/v4/projects/${parsed.project_id}/groups/${parsed.group_id}/resolved`,
-        );
-      case 'unresolve':
-        return ctx.client.request(
-          'PUT',
-          `/api/v4/projects/${parsed.project_id}/groups/${parsed.group_id}/unresolved`,
-        );
-      case 'delete':
-        return ctx.client.request(
-          'DELETE',
-          `/api/v4/projects/${parsed.project_id}/groups/${parsed.group_id}`,
         );
     }
   },

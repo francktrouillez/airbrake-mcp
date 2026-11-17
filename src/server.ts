@@ -5,7 +5,8 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
 import { z } from 'zod';
 import { AirbrakeClient } from './client/airbrake.js';
 import { loadConfig } from './config.js';
-import { allTools } from './tools/index.js';
+import { allTools, readOnlyTools } from './tools/index.js';
+import { READ_ONLY_DISABLED_SUFFIX, READ_ONLY_NOTICE } from './tools/read-only.js';
 import type { ToolContext } from './tools/types.js';
 
 // Read version from package.json at runtime so it can never drift from
@@ -154,6 +155,7 @@ export async function createServer(
       'airbrake-mcp: warning: AIRBRAKE_USER_TOKEN is not set — management API calls will fail with 401 (notify-only setups can ignore this)\n',
     );
   }
+  if (config.readOnly) process.stderr.write(READ_ONLY_NOTICE);
   const client = new AirbrakeClient(config);
   const ctx: ToolContext = { client, config };
 
@@ -164,21 +166,27 @@ export async function createServer(
 
   // The tool set is static: convert the schemas once, at startup, so a
   // schema zod cannot represent fails here instead of on every tools/list.
-  const tools = allTools.map((t) => ({
+  const activeTools = config.readOnly ? readOnlyTools : allTools;
+  const tools = activeTools.map((t) => ({
     name: t.name,
+    title: t.title,
     description: t.description,
     inputSchema: toMcpInputSchema(t.inputSchema),
+    annotations: { title: t.title, ...t.annotations },
   }));
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }));
 
   server.setRequestHandler(CallToolRequestSchema, async (req) => {
-    const tool = allTools.find((t) => t.name === req.params.name);
+    const tool = activeTools.find((t) => t.name === req.params.name);
     if (!tool) {
-      return {
-        isError: true,
-        content: [{ type: 'text', text: `unknown tool: ${req.params.name}` }],
-      };
+      // Enforced here, not just by hiding the tool from tools/list: a client
+      // may call a tool by name without listing first.
+      const known = allTools.some((t) => t.name === req.params.name);
+      const text = known
+        ? `${req.params.name} ${READ_ONLY_DISABLED_SUFFIX}`
+        : `unknown tool: ${req.params.name}`;
+      return { isError: true, content: [{ type: 'text', text }] };
     }
     try {
       const result = await tool.handler(ctx, req.params.arguments ?? {});

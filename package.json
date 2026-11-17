@@ -45,7 +45,7 @@
     "test:e2e:run": "vitest run --config vitest.e2e.config.ts",
     "lint": "eslint 'src/**/*.ts' 'test/**/*.ts'",
     "typecheck": "tsc --noEmit",
-    "validate": "node scripts/validate-mcp.mjs 8",
+    "validate": "node scripts/validate-mcp.mjs 12",
     "audit:ci": "node scripts/audit.mjs",
     "prepublishOnly": "npm run build"
   },

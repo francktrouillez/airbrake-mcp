@@ -27,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   payload is reduced to those top-level keys; `count`, `_pagination` and
   other non-array properties are untouched. Omitting `fields` keeps the raw
   payload.
-- **`airbrake_sourcemaps` `upload` action.** Uploads a local source map
+- **`airbrake_sourcemaps_upload` tool.** Uploads a local source map
   (`file_path`, `name`, optional `pattern`) as multipart/form-data — no more
   hand-building a multipart string for `airbrake_request`. Before any HTTP
   request, `file_path` must be absolute (no Windows UNC/device paths) and
@@ -44,6 +44,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (fetch sets the multipart boundary, any caller content-type is dropped)
   and re-sent in full on retries; `minTimeoutMs` raises the per-attempt
   timeout for one request.
+- **MCP tool annotations.** Every tool now advertises a `title` and
+  `annotations` (`readOnlyHint`, `destructiveHint`, `idempotentHint`,
+  `openWorldHint`) in `tools/list`, so clients can auto-approve reads and
+  flag destructive calls. See the annotation table in the README.
+- **`AIRBRAKE_READ_ONLY` read-only mode.** `1`/`true`/`yes` (case-insensitive)
+  hides `airbrake_groups_update`, `airbrake_deploys_create`,
+  `airbrake_sourcemaps_upload`, `airbrake_notify` and `airbrake_delete` from `tools/list` and refuses calls to them in the
+  call handler without any HTTP request. `airbrake_request` stays available
+  but GET-only (advertised `method` enum `["GET"]`, no `body`; write
+  methods and bodies are rejected before any HTTP; annotations become
+  read-only). As a backstop below every tool, the HTTP client refuses
+  anything but a plain GET in read-only mode, including method-override
+  headers and a `_method` query parameter (in `query` or embedded in `path`).
+  Calling a moved action on a read tool says its replacement is disabled.
+  A one-line notice is written to stderr at startup. Values other than `1/true/yes/0/false/no/""`
+  fail startup.
+- New tools `airbrake_groups_update`, `airbrake_deploys_create` and
+  `airbrake_delete` (see **Changed**), and `airbrake_sourcemaps_upload`
+  (see the source-map upload entry).
 
 ### Changed
 
@@ -83,6 +102,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `airbrake_notices` `list` now defaults to `per_page: 10` (was 50; max is
   still 200) since every notice carries a full backtrace/context/params.
   Pass `per_page` explicitly to get the old page size.
+- **BREAKING:** write and destructive actions moved out of the resource
+  tools into dedicated tools so that each tool's annotations are accurate.
+  The HTTP requests sent are unchanged.
+  - `airbrake_groups` `mute` / `unmute` / `resolve` / `unresolve` →
+    `airbrake_groups_update` (same arguments).
+  - `airbrake_groups` `delete` → `airbrake_delete` with `resource: "group"`.
+  - `airbrake_sourcemaps` `delete` → `airbrake_delete` with
+    `resource: "sourcemap"`.
+  - `airbrake_deploys` `create` → `airbrake_deploys_create` (`project_id` +
+    `deploy`, no `action`).
+  - `airbrake_groups`, `airbrake_deploys` and `airbrake_sourcemaps` are now
+    read-only; calling a removed action returns an error naming its
+    replacement.
+- The server now exposes 12 tools (was 8).
 
 ### Fixed
 

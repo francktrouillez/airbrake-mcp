@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { PAGINATION_HINT } from '../client/pagination.js';
 import { fieldsSchema, listResult } from './fields.js';
 import { noticeUuid, pageSchema, projectId, snowflakeId } from './schemas.js';
+import { READ_ONLY_HINTS } from './read-only.js';
 import type { ToolDefinition } from './types.js';
 
 // Notices carry full backtraces/context/params, so a smaller default keeps a
@@ -36,8 +37,10 @@ const inputSchema = z.discriminatedUnion('action', [
 
 export const noticesTool: ToolDefinition<typeof inputSchema> = {
   name: 'airbrake_notices',
+  title: 'Read Airbrake notices',
   description: `Airbrake notices (individual error occurrences). list and get_status are documented; get hits an undocumented dashboard endpoint that currently works on hosted Airbrake. group_id and notice_id MUST be passed as strings (19-digit snowflakes). ${PAGINATION_HINT} Returns the raw Airbrake JSON payload — no data is removed unless list is given \`fields\` (keeps only those top-level keys per item).`,
   inputSchema,
+  annotations: READ_ONLY_HINTS,
   handler: async (ctx, input) => {
     const parsed = inputSchema.parse(input);
     switch (parsed.action) {

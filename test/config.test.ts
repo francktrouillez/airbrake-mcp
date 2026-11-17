@@ -114,6 +114,28 @@ describe('loadConfig', () => {
     });
   });
 
+  describe('AIRBRAKE_READ_ONLY', () => {
+    it('defaults to false when unset', () => {
+      expect(loadConfig({ AIRBRAKE_USER_TOKEN: 'x' }).readOnly).toBe(false);
+    });
+
+    it.each(['1', 'true', 'yes', 'TRUE', 'Yes', ' true '])('accepts %j as true', (raw) => {
+      expect(loadConfig({ AIRBRAKE_USER_TOKEN: 'x', AIRBRAKE_READ_ONLY: raw }).readOnly).toBe(true);
+    });
+
+    it.each(['0', 'false', 'no', '', 'FALSE', 'No'])('accepts %j as false', (raw) => {
+      expect(loadConfig({ AIRBRAKE_USER_TOKEN: 'x', AIRBRAKE_READ_ONLY: raw }).readOnly).toBe(
+        false,
+      );
+    });
+
+    it.each(['maybe', 'on', '2', 'y'])('rejects %j', (raw) => {
+      expect(() => loadConfig({ AIRBRAKE_USER_TOKEN: 'x', AIRBRAKE_READ_ONLY: raw })).toThrow(
+        /AIRBRAKE_READ_ONLY/,
+      );
+    });
+  });
+
   describe('numeric env validation', () => {
     it('rejects negative AIRBRAKE_TIMEOUT_MS', () => {
       expect(() => loadConfig({ AIRBRAKE_USER_TOKEN: 'x', AIRBRAKE_TIMEOUT_MS: '-1' })).toThrow(

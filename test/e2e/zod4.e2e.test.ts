@@ -14,13 +14,22 @@ const SNOWFLAKE = '3741526488590376432';
 
 const EXPECTED_ACTIONS: Record<string, string[]> = {
   airbrake_projects: ['list', 'get', 'list_activities'],
-  airbrake_groups: ['list', 'get', 'get_stats', 'resolve', 'unresolve', 'mute', 'unmute', 'delete'],
+  airbrake_groups: ['list', 'get', 'get_stats'],
+  airbrake_groups_update: ['mute', 'unmute', 'resolve', 'unresolve'],
   airbrake_notices: ['list', 'get', 'get_status'],
-  airbrake_deploys: ['list', 'get', 'create'],
+  airbrake_deploys: ['list', 'get'],
   airbrake_performance: ['routes_stats', 'queries_stats', 'queues_stats'],
   airbrake_notify: ['notify'],
-  airbrake_sourcemaps: ['list', 'get', 'delete', 'upload'],
+  airbrake_sourcemaps: ['list', 'get'],
 };
+
+// Tools without an `action` discriminator.
+const OTHER_TOOLS = [
+  'airbrake_deploys_create',
+  'airbrake_sourcemaps_upload',
+  'airbrake_delete',
+  'airbrake_request',
+];
 
 const PAGINATED = [
   'airbrake_projects',
@@ -67,9 +76,9 @@ describe('e2e: zod 4 JSON Schema + validation', () => {
   });
 
   describe('tools/list schemas', () => {
-    it('lists all 8 tools', () => {
+    it('lists all 12 tools', () => {
       expect(tools.map((t) => t.name).sort()).toEqual(
-        [...Object.keys(EXPECTED_ACTIONS), 'airbrake_request'].sort(),
+        [...Object.keys(EXPECTED_ACTIONS), ...OTHER_TOOLS].sort(),
       );
     });
 
@@ -185,7 +194,7 @@ describe('e2e: zod 4 JSON Schema + validation', () => {
         query: { page: '1', per_page: '50' },
       },
       {
-        tool: 'airbrake_groups',
+        tool: 'airbrake_groups_update',
         args: { action: 'mute', project_id: 42, group_id: SNOWFLAKE },
         method: 'PUT',
         path: `/api/v4/projects/42/groups/${SNOWFLAKE}/muted`,
@@ -229,8 +238,8 @@ describe('e2e: zod 4 JSON Schema + validation', () => {
         query: { key: 'notifier-key-42' },
       },
       {
-        tool: 'airbrake_sourcemaps',
-        args: { action: 'delete', project_id: 42, sourcemap_id: '77' },
+        tool: 'airbrake_delete',
+        args: { resource: 'sourcemap', project_id: 42, sourcemap_id: '77' },
         method: 'DELETE',
         path: '/api/v4/projects/42/sourcemaps/77',
       },
@@ -266,10 +275,10 @@ describe('e2e: zod 4 JSON Schema + validation', () => {
       expect(JSON.parse(req!.body)).toEqual(payload);
     });
 
-    it('airbrake_deploys create forwards record fields at the top level of the body', async () => {
+    it('airbrake_deploys_create forwards record fields at the top level of the body', async () => {
       mock.on('POST', '/api/v4/projects/42/deploys', { status: 201, body: { id: '1' } });
       const deploy = { environment: 'production', revision: 'abc', version: '1.2.3' };
-      const res = await mcp.call('airbrake_deploys', { action: 'create', project_id: 42, deploy });
+      const res = await mcp.call('airbrake_deploys_create', { project_id: 42, deploy });
       expect(res.isError).toBe(false);
       const [req] = mock.find('POST', '/api/v4/projects/42/deploys');
       expect(JSON.parse(req!.body)).toEqual(deploy);

@@ -70,19 +70,26 @@ describe('e2e: airbrake_sourcemaps upload', () => {
   };
 
   const upload = (filePath: string, extra: Record<string, unknown> = {}): Promise<ToolResult> =>
-    mcp.call('airbrake_sourcemaps', {
-      action: 'upload',
+    mcp.call('airbrake_sourcemaps_upload', {
       project_id: 42,
       file_path: filePath,
       name: 'app.min.js',
       ...extra,
     });
 
-  it('advertises the upload action and its fields in tools/list', async () => {
+  it('advertises airbrake_sourcemaps_upload as a non-idempotent write with its fields', async () => {
     const { tools } = await mcp.client.listTools();
-    const tool = tools.find((t) => t.name === 'airbrake_sourcemaps');
-    const props = tool?.inputSchema.properties as Record<string, { enum?: string[] }>;
-    expect(props.action?.enum).toContain('upload');
+    const tool = tools.find((t) => t.name === 'airbrake_sourcemaps_upload');
+    expect(tool?.annotations).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+    });
+    expect(tool?.inputSchema.required).toEqual(
+      expect.arrayContaining(['project_id', 'file_path', 'name']),
+    );
+    const props = tool?.inputSchema.properties as Record<string, unknown>;
+    expect(props).not.toHaveProperty('action');
     expect(props).toHaveProperty('file_path');
     expect(props).toHaveProperty('name');
     expect(props).toHaveProperty('pattern');

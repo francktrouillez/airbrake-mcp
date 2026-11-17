@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { PAGINATION_HINT } from '../client/pagination.js';
 import { fieldsSchema, listResult } from './fields.js';
 import { pageSchema, projectId, snowflakeId } from './schemas.js';
+import { assertNotMovedAction } from './moved-actions.js';
+import { READ_ONLY_HINTS } from './read-only.js';
 import type { ToolDefinition } from './types.js';
 
 const inputSchema = z.discriminatedUnion('action', [
@@ -13,18 +15,20 @@ const inputSchema = z.discriminatedUnion('action', [
     project_id: projectId,
     deploy_id: snowflakeId,
   }),
-  z.object({
-    action: z.literal('create'),
-    project_id: projectId,
-    deploy: z.record(z.string(), z.unknown()),
-  }),
 ]);
+
+const MOVED_ACTIONS = {
+  create: 'airbrake_deploys_create',
+};
 
 export const deploysTool: ToolDefinition<typeof inputSchema> = {
   name: 'airbrake_deploys',
-  description: `Airbrake deploys: list, get, or create a deploy marker. deploy_id MUST be passed as a string (19-digit snowflake). ${PAGINATION_HINT} Returns the raw Airbrake JSON payload — no data is removed unless list is given \`fields\` (keeps only those top-level keys per item).`,
+  title: 'Read Airbrake deploys',
+  description: `Read Airbrake deploys: list, get. Read-only — to create a deploy marker use airbrake_deploys_create. deploy_id MUST be passed as a string (19-digit snowflake). ${PAGINATION_HINT} Returns the raw Airbrake JSON payload — no data is removed unless list is given \`fields\` (keeps only those top-level keys per item).`,
+  annotations: READ_ONLY_HINTS,
   inputSchema,
   handler: async (ctx, input) => {
+    assertNotMovedAction('airbrake_deploys', input, MOVED_ACTIONS, ctx.config.readOnly);
     const parsed = inputSchema.parse(input);
     switch (parsed.action) {
       case 'list': {
@@ -40,13 +44,6 @@ export const deploysTool: ToolDefinition<typeof inputSchema> = {
           'GET',
           `/api/v4/projects/${parsed.project_id}/deploys/${parsed.deploy_id}`,
         );
-      case 'create':
-        // Airbrake's POST /deploys expects the deploy fields at the TOP LEVEL
-        // of the body (not nested under a `deploy` key). Wrapping creates a
-        // deploy with empty fields silently — confirmed against live API.
-        return ctx.client.request('POST', `/api/v4/projects/${parsed.project_id}/deploys`, {
-          body: parsed.deploy,
-        });
     }
   },
 };

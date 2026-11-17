@@ -1,5 +1,6 @@
 import type { Config } from '../config.js';
 import { AirbrakeApiError, AirbrakeNetworkError } from './errors.js';
+import { assertReadOnlyRequest } from './read-only-guard.js';
 import { classifyFetchError, failureHint, isRetriable, type RetryOutcome } from './retry-policy.js';
 
 export type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
@@ -125,6 +126,11 @@ export class AirbrakeClient {
 
   async request(method: HttpMethod, path: string, options: RequestOptions = {}): Promise<unknown> {
     const url = `${this.config.host}${path}${buildQuery(options.query)}`;
+    const userHeaders = sanitizeUserHeaders(options.headers);
+    // Defence in depth under the tool filter (src/tools/index.ts): with
+    // AIRBRAKE_READ_ONLY set only a plain GET leaves the process, whatever a
+    // tool's annotations claim.
+    if (this.config.readOnly) assertReadOnlyRequest(method, path, url, userHeaders);
     if (options.auth !== 'none' && !this.config.userToken) {
       throw new AirbrakeApiError(401, method, path, {
         message: 'AIRBRAKE_USER_TOKEN env var is required',
@@ -132,7 +138,7 @@ export class AirbrakeClient {
     }
     const { body, headers } = encodeBody(options.body, {
       accept: 'application/json',
-      ...sanitizeUserHeaders(options.headers),
+      ...userHeaders,
       ...(options.auth !== 'none' ? { authorization: `Bearer ${this.config.userToken}` } : {}),
     });
     const timeoutMs = Math.max(this.config.timeoutMs, options.minTimeoutMs ?? 0);

@@ -43,11 +43,13 @@ const ID_CASES: {
   good?: string;
   bad?: unknown[];
 }[] = [
-  ...['get', 'delete', 'mute', 'unmute', 'resolve', 'unresolve'].map((action) => ({
-    tool: 'airbrake_groups',
+  { tool: 'airbrake_groups', args: { action: 'get' }, field: 'group_id' },
+  ...['mute', 'unmute', 'resolve', 'unresolve'].map((action) => ({
+    tool: 'airbrake_groups_update',
     args: { action },
     field: 'group_id',
   })),
+  { tool: 'airbrake_delete', args: { resource: 'group' }, field: 'group_id' },
   { tool: 'airbrake_groups', args: { action: 'get_stats', ...TIME_RANGE }, field: 'group_id' },
   { tool: 'airbrake_groups', args: { action: 'list' }, field: 'deploy_id' },
   { tool: 'airbrake_notices', args: { action: 'list' }, field: 'group_id' },
@@ -55,7 +57,7 @@ const ID_CASES: {
   { tool: 'airbrake_notices', args: { action: 'get', group_id: GOOD_ID }, field: 'notice_id' },
   { tool: 'airbrake_deploys', args: { action: 'get' }, field: 'deploy_id' },
   { tool: 'airbrake_sourcemaps', args: { action: 'get' }, field: 'sourcemap_id' },
-  { tool: 'airbrake_sourcemaps', args: { action: 'delete' }, field: 'sourcemap_id' },
+  { tool: 'airbrake_delete', args: { resource: 'sourcemap' }, field: 'sourcemap_id' },
   {
     tool: 'airbrake_notices',
     args: { action: 'get_status' },
@@ -113,7 +115,7 @@ describe('e2e: tool schemas', () => {
   });
 
   for (const { tool, args, field, good = FIELD_ID, bad: badValues = BAD_SNOWFLAKES } of ID_CASES) {
-    it(`${tool} ${String(args.action)} validates ${field} before any HTTP request`, async () => {
+    it(`${tool} ${String(args.action ?? args.resource)} validates ${field} before any HTTP request`, async () => {
       // Positive control: with a valid ID the call reaches Airbrake carrying
       // that ID, so the other args are valid and any rejection below is down
       // to `field`.

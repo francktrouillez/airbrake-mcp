@@ -1,5 +1,6 @@
 {
   "name": "airbrake_projects",
+  "title": "Read Airbrake projects",
   "description": "Airbrake projects: list, get, list_activities (audit log). Project updates are intentionally NOT modeled here — the /api/v4/projects/:id update endpoint requires dashboard-session credentials, not Personal API tokens, and returns 401 for all tokens our MCP supports. Use the Airbrake dashboard to change project settings. List results include `_pagination.has_more`/`next_page`. Returns the raw Airbrake JSON payload — no data is removed unless list/list_activities is given `fields` (keeps only those top-level keys per item).",
   "inputSchema": {
     "type": "object",
@@ -42,5 +43,12 @@
     "required": [
       "action"
     ]
+  },
+  "annotations": {
+    "title": "Read Airbrake projects",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": true
   }
 }

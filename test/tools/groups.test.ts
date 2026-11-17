@@ -103,7 +103,7 @@ describe('airbrake_groups', () => {
   it('rejects path traversal in group_id', async () => {
     for (const bad of ['../../999', '123/../999', 'abc', '123abc', '../etc/passwd', '']) {
       await expect(
-        groupsTool.handler(ctx(), { action: 'delete', project_id: 1, group_id: bad }),
+        groupsTool.handler(ctx(), { action: 'get', project_id: 1, group_id: bad }),
       ).rejects.toThrow(/snowflake/i);
     }
   });
@@ -313,64 +313,21 @@ describe('airbrake_groups', () => {
     });
   });
 
-  it('mute → PUT /muted with no body', async () => {
-    nock('https://api.airbrake.io')
-      .put(
-        `/api/v4/projects/1/groups/${GROUP_ID}/muted`,
-        (body) => body === '' || body === undefined,
-      )
-      .reply(200, { group: { id: GROUP_ID, muted: true } });
-    const r = await groupsTool.handler(ctx(), {
-      action: 'mute',
-      project_id: 1,
-      group_id: GROUP_ID,
-    });
-    expect(r).toEqual({ group: { id: GROUP_ID, muted: true } });
-  });
-
-  it('unmute → PUT /unmuted', async () => {
-    nock('https://api.airbrake.io')
-      .put(`/api/v4/projects/1/groups/${GROUP_ID}/unmuted`)
-      .reply(200, { group: { id: GROUP_ID, muted: false } });
-    const r = await groupsTool.handler(ctx(), {
-      action: 'unmute',
-      project_id: 1,
-      group_id: GROUP_ID,
-    });
-    expect(r).toEqual({ group: { id: GROUP_ID, muted: false } });
-  });
-
-  it('resolve → PUT /resolved', async () => {
-    nock('https://api.airbrake.io')
-      .put(`/api/v4/projects/1/groups/${GROUP_ID}/resolved`)
-      .reply(200, { group: { id: GROUP_ID, resolved: true } });
-    const r = await groupsTool.handler(ctx(), {
-      action: 'resolve',
-      project_id: 1,
-      group_id: GROUP_ID,
-    });
-    expect(r).toEqual({ group: { id: GROUP_ID, resolved: true } });
-  });
-
-  it('unresolve → PUT /unresolved', async () => {
-    nock('https://api.airbrake.io')
-      .put(`/api/v4/projects/1/groups/${GROUP_ID}/unresolved`)
-      .reply(200, { group: { id: GROUP_ID, resolved: false } });
-    const r = await groupsTool.handler(ctx(), {
-      action: 'unresolve',
-      project_id: 1,
-      group_id: GROUP_ID,
-    });
-    expect(r).toEqual({ group: { id: GROUP_ID, resolved: false } });
-  });
-
-  it('delete → DELETE returns null', async () => {
-    nock('https://api.airbrake.io').delete(`/api/v4/projects/1/groups/${GROUP_ID}`).reply(204);
-    const r = await groupsTool.handler(ctx(), {
-      action: 'delete',
-      project_id: 1,
-      group_id: GROUP_ID,
-    });
-    expect(r).toBeNull();
+  it.each([
+    ['mute', 'airbrake_groups_update'],
+    ['unmute', 'airbrake_groups_update'],
+    ['resolve', 'airbrake_groups_update'],
+    ['unresolve', 'airbrake_groups_update'],
+    ['delete', 'airbrake_delete with resource "group"'],
+  ])('rejects moved write action %j, pointing at %s, with no HTTP', async (action, target) => {
+    await expect(
+      groupsTool.handler(ctx(), {
+        // @ts-expect-error: write actions were removed from the read-only tool
+        action,
+        project_id: 1,
+        group_id: GROUP_ID,
+      }),
+    ).rejects.toThrow(`airbrake_groups no longer supports action "${action}": use ${target}`);
+    expect(nock.pendingMocks()).toHaveLength(0);
   });
 });

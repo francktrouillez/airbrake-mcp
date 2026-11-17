@@ -1,6 +1,7 @@
 {
   "name": "airbrake_notify",
-  "description": "Send a notice (error report) TO Airbrake via the Notifier API. Requires AIRBRAKE_PROJECT_KEYS[project_id] to be set. Returns the raw Airbrake JSON payload — no data is removed.",
+  "title": "Send a notice to Airbrake (Notifier API)",
+  "description": "Send a notice (error report) TO Airbrake via the Notifier API. Requires AIRBRAKE_PROJECT_KEYS[project_id] to be set. Disabled when AIRBRAKE_READ_ONLY is set. Returns the raw Airbrake JSON payload — no data is removed.",
   "inputSchema": {
     "type": "object",
     "properties": {
@@ -35,5 +36,12 @@
       "project_id",
       "payload"
     ]
+  },
+  "annotations": {
+    "title": "Send a notice to Airbrake (Notifier API)",
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": true
   }
 }

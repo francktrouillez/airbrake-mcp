@@ -4,6 +4,8 @@ export interface Config {
   host: string;
   timeoutMs: number;
   maxRetries: number;
+  /** AIRBRAKE_READ_ONLY: hide/refuse every tool that can change Airbrake state. */
+  readOnly: boolean;
 }
 
 function parseInt(name: string, raw: string | undefined, fallback: number, min: number): number {
@@ -41,6 +43,19 @@ function parseHost(raw: string | undefined): string {
   return value.replace(/\/+$/, '');
 }
 
+const TRUE_VALUES = new Set(['1', 'true', 'yes']);
+const FALSE_VALUES = new Set(['0', 'false', 'no', '']);
+
+// Strict boolean parsing: a typo like AIRBRAKE_READ_ONLY=ture must fail
+// startup rather than silently leave write tools enabled.
+function parseBool(name: string, raw: string | undefined, fallback: boolean): boolean {
+  if (raw === undefined) return fallback;
+  const value = raw.trim().toLowerCase();
+  if (TRUE_VALUES.has(value)) return true;
+  if (FALSE_VALUES.has(value)) return false;
+  throw new Error(`${name} must be one of 1/true/yes or 0/false/no, got: ${raw}`);
+}
+
 function parseProjectKeys(raw: string | undefined): Record<string, string> {
   if (!raw) return {};
   let parsed: unknown;
@@ -71,5 +86,6 @@ export function loadConfig(env: NodeJS.ProcessEnv | Record<string, string | unde
     timeoutMs: parseInt('AIRBRAKE_TIMEOUT_MS', env.AIRBRAKE_TIMEOUT_MS, 15000, 1),
     // maxRetries may be zero (disable retries) but not negative.
     maxRetries: parseInt('AIRBRAKE_MAX_RETRIES', env.AIRBRAKE_MAX_RETRIES, 2, 0),
+    readOnly: parseBool('AIRBRAKE_READ_ONLY', env.AIRBRAKE_READ_ONLY, false),
   };
 }

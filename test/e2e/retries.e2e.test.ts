@@ -61,7 +61,7 @@ describe('e2e: retry policy', () => {
   describe('non-idempotent methods are sent exactly once on 5xx / network errors', () => {
     const REQUEST_PATH = `/api/v4/projects/${PROJECT}/things/1`;
     const DROPPED = 'dropped connection';
-    const DELETE_GROUP = { action: 'delete', project_id: PROJECT, group_id: GROUP_ID };
+    const DELETE_GROUP = { resource: 'group', project_id: PROJECT, group_id: GROUP_ID };
     const cases = [
       {
         tool: 'airbrake_notify',
@@ -71,21 +71,21 @@ describe('e2e: retry policy', () => {
         failure: 503,
       },
       {
-        tool: 'airbrake_deploys',
-        args: { action: 'create', project_id: PROJECT, deploy: { revision: 'abc123' } },
+        tool: 'airbrake_deploys_create',
+        args: { project_id: PROJECT, deploy: { revision: 'abc123' } },
         method: 'POST',
         path: DEPLOYS_PATH,
         failure: DROPPED,
       },
       {
-        tool: 'airbrake_groups',
+        tool: 'airbrake_delete',
         args: DELETE_GROUP,
         method: 'DELETE',
         path: GROUP_PATH,
         failure: 502,
       },
       {
-        tool: 'airbrake_groups',
+        tool: 'airbrake_delete',
         args: DELETE_GROUP,
         method: 'DELETE',
         path: GROUP_PATH,
@@ -150,11 +150,11 @@ describe('e2e: retry policy', () => {
       expect(mock.find('GET', GROUP_PATH)).toHaveLength(2);
     });
 
-    it('airbrake_groups mute (PUT) 500 then 204 → success after 2 requests', async () => {
+    it('airbrake_groups_update mute (PUT) 500 then 204 → success after 2 requests', async () => {
       const path = `${GROUP_PATH}/muted`;
       mock.on('PUT', path, fastFail(500), 1);
       mock.on('PUT', path, { status: 204 });
-      const res = await mcp.call('airbrake_groups', {
+      const res = await mcp.call('airbrake_groups_update', {
         action: 'mute',
         project_id: PROJECT,
         group_id: GROUP_ID,
@@ -191,11 +191,11 @@ describe('e2e: retry policy', () => {
       expect(JSON.parse(reqs[1]!.body)).toEqual(NOTICE);
     });
 
-    it('airbrake_groups delete (DELETE) 429 then 204 → success after 2 requests', async () => {
+    it('airbrake_delete group (DELETE) 429 then 204 → success after 2 requests', async () => {
       mock.on('DELETE', GROUP_PATH, fastFail(429), 1);
       mock.on('DELETE', GROUP_PATH, { status: 204 });
-      const res = await mcp.call('airbrake_groups', {
-        action: 'delete',
+      const res = await mcp.call('airbrake_delete', {
+        resource: 'group',
         project_id: PROJECT,
         group_id: GROUP_ID,
       });
