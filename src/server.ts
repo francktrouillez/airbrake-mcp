@@ -182,7 +182,9 @@ export async function createServer(
     }
     try {
       const result = await tool.handler(ctx, req.params.arguments ?? {});
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      // Compact JSON: indentation costs tokens on every response and carries no
+      // information for the model.
+      return { content: [{ type: 'text', text: JSON.stringify(result) }] };
     } catch (err) {
       return { isError: true, content: [{ type: 'text', text: formatToolError(tool.name, err) }] };
     }

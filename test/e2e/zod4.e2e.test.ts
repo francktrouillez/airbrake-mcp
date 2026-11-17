@@ -108,7 +108,14 @@ describe('e2e: zod 4 JSON Schema + validation', () => {
       expect(s.required).not.toContain('per_page');
       const p = s.properties as Record<string, Json>;
       expect(p.page).toMatchObject({ type: 'integer', default: 1 });
-      expect(p.per_page).toMatchObject({ type: 'integer', minimum: 1, maximum: 200, default: 50 });
+      // Notices default to 10 per page (full backtraces); the bounds are shared.
+      const perPage = name === 'airbrake_notices' ? 10 : 50;
+      expect(p.per_page).toMatchObject({
+        type: 'integer',
+        minimum: 1,
+        maximum: 200,
+        default: perPage,
+      });
     });
 
     it('snowflake IDs are advertised as digit-only strings', () => {

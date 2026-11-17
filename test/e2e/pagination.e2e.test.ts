@@ -111,6 +111,9 @@ describe('e2e: pagination has_more / next_page', () => {
     });
   });
 
+  // Notices default to a smaller page than the other list actions.
+  const NOTICES_PER_PAGE = 10;
+
   it('reports has_more false for an empty notices list', async () => {
     mock.on('GET', `/api/v4/projects/42/groups/${GROUP_ID}/notices`, {
       body: { notices: [], count: 0 },
@@ -123,7 +126,7 @@ describe('e2e: pagination has_more / next_page', () => {
     expect(res.isError).toBe(false);
     expect(paginationOf(res.json)).toEqual({
       page: 1,
-      per_page: 50,
+      per_page: NOTICES_PER_PAGE,
       count: 0,
       has_more: false,
       total_pages: 0,
@@ -140,7 +143,7 @@ describe('e2e: pagination has_more / next_page', () => {
     expect(res.isError).toBe(false);
     expect(paginationOf(res.json)).toEqual({
       page: 1,
-      per_page: 50,
+      per_page: NOTICES_PER_PAGE,
       has_more: false,
       has_more_is_estimate: true,
     });
@@ -152,6 +155,8 @@ describe('e2e: pagination has_more / next_page', () => {
     args: Record<string, unknown>;
     path: string;
     key: string;
+    /** Default page size when it differs from the shared 50. */
+    perPage?: number;
   }> = [
     {
       label: 'projects list',
@@ -180,6 +185,7 @@ describe('e2e: pagination has_more / next_page', () => {
       args: { action: 'list', project_id: 42, group_id: GROUP_ID },
       path: `/api/v4/projects/42/groups/${GROUP_ID}/notices`,
       key: 'notices',
+      perPage: NOTICES_PER_PAGE,
     },
     {
       label: 'deploys list',
@@ -199,16 +205,17 @@ describe('e2e: pagination has_more / next_page', () => {
 
   for (const action of listActions) {
     it(`${action.label} carries has_more/next_page/total_pages`, async () => {
-      mock.on('GET', action.path, { body: { [action.key]: items(50), count: 75 } });
+      const perPage = action.perPage ?? 50;
+      mock.on('GET', action.path, { body: { [action.key]: items(perPage), count: 75 } });
       const res = await mcp.call(action.tool, action.args);
       expect(res.isError).toBe(false);
       expect(paginationOf(res.json)).toEqual({
         page: 1,
-        per_page: 50,
+        per_page: perPage,
         count: 75,
         has_more: true,
         next_page: 2,
-        total_pages: 2,
+        total_pages: Math.ceil(75 / perPage),
       });
       expect(mock.find('GET', action.path)).toHaveLength(1);
     });

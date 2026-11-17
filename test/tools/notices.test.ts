@@ -18,23 +18,23 @@ const NOTICE_ID = '4338045208751454778';
 describe('airbrake_notices', () => {
   beforeEach(() => nock.cleanAll());
 
-  it('list with string group_id', async () => {
+  it('list with string group_id defaults to per_page=10', async () => {
     nock('https://api.airbrake.io')
       .get(`/api/v4/projects/1/groups/${GROUP_ID}/notices`)
-      .query({ page: '1', per_page: '50' })
+      .query({ page: '1', per_page: '10' })
       .reply(200, { notices: [] });
     const r = await noticesTool.handler(ctx(), {
       action: 'list',
       project_id: 1,
       group_id: GROUP_ID,
     });
-    expect(r).toMatchObject({ notices: [], _pagination: { page: 1, per_page: 50 } });
+    expect(r).toMatchObject({ notices: [], _pagination: { page: 1, per_page: 10 } });
   });
 
   it('list with version filter', async () => {
     nock('https://api.airbrake.io')
       .get(`/api/v4/projects/1/groups/${GROUP_ID}/notices`)
-      .query({ page: '1', per_page: '50', version: '1.2.3' })
+      .query({ page: '1', per_page: '10', version: '1.2.3' })
       .reply(200, { notices: [] });
     const r = await noticesTool.handler(ctx(), {
       action: 'list',
@@ -42,13 +42,36 @@ describe('airbrake_notices', () => {
       group_id: GROUP_ID,
       version: '1.2.3',
     });
-    expect(r).toMatchObject({ notices: [], _pagination: { page: 1, per_page: 50 } });
+    expect(r).toMatchObject({ notices: [], _pagination: { page: 1, per_page: 10 } });
+  });
+
+  it('list honours an explicit per_page up to 200', async () => {
+    nock('https://api.airbrake.io')
+      .get(`/api/v4/projects/1/groups/${GROUP_ID}/notices`)
+      .query({ page: '3', per_page: '200' })
+      .reply(200, { notices: [] });
+    const r = await noticesTool.handler(ctx(), {
+      action: 'list',
+      project_id: 1,
+      group_id: GROUP_ID,
+      page: 3,
+      per_page: 200,
+    });
+    expect(r).toMatchObject({ _pagination: { page: 3, per_page: 200 } });
+    await expect(
+      noticesTool.handler(ctx(), {
+        action: 'list',
+        project_id: 1,
+        group_id: GROUP_ID,
+        per_page: 201,
+      }),
+    ).rejects.toThrow();
   });
 
   it('list with an empty notices array → has_more false (estimate)', async () => {
     nock('https://api.airbrake.io')
       .get(`/api/v4/projects/1/groups/${GROUP_ID}/notices`)
-      .query({ page: '1', per_page: '50' })
+      .query({ page: '1', per_page: '10' })
       .reply(200, { notices: [] });
     const r = await noticesTool.handler(ctx(), {
       action: 'list',
@@ -57,7 +80,7 @@ describe('airbrake_notices', () => {
     });
     expect((r as { _pagination: object })._pagination).toEqual({
       page: 1,
-      per_page: 50,
+      per_page: 10,
       has_more: false,
       has_more_is_estimate: true,
     });

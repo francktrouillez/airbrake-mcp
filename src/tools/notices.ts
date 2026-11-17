@@ -1,17 +1,26 @@
 import { z } from 'zod';
-import { PAGINATION_HINT, withPagination } from '../client/pagination.js';
+import { PAGINATION_HINT } from '../client/pagination.js';
+import { fieldsSchema, listResult } from './fields.js';
 import { noticeUuid, pageSchema, projectId, snowflakeId } from './schemas.js';
 import type { ToolDefinition } from './types.js';
+
+// Notices carry full backtraces/context/params, so a smaller default keeps a
+// single call from flooding the model's context. Bounds (max 200) stay shared.
+const noticesPage = {
+  ...pageSchema.shape,
+  per_page: pageSchema.shape.per_page.unwrap().default(10),
+};
 
 const inputSchema = z.discriminatedUnion('action', [
   z
     .object({
       action: z.literal('list'),
+      fields: fieldsSchema,
       project_id: projectId,
       group_id: snowflakeId,
       version: z.string().optional().describe('Filter notices by deploy/app version'),
     })
-    .extend(pageSchema.shape),
+    .extend(noticesPage),
   z.object({
     action: z.literal('get'),
     project_id: projectId,
@@ -27,7 +36,7 @@ const inputSchema = z.discriminatedUnion('action', [
 
 export const noticesTool: ToolDefinition<typeof inputSchema> = {
   name: 'airbrake_notices',
-  description: `Airbrake notices (individual error occurrences). list and get_status are documented; get hits an undocumented dashboard endpoint that currently works on hosted Airbrake. group_id and notice_id MUST be passed as strings (19-digit snowflakes). ${PAGINATION_HINT} Returns the raw Airbrake JSON payload — no data is removed.`,
+  description: `Airbrake notices (individual error occurrences). list and get_status are documented; get hits an undocumented dashboard endpoint that currently works on hosted Airbrake. group_id and notice_id MUST be passed as strings (19-digit snowflakes). ${PAGINATION_HINT} Returns the raw Airbrake JSON payload — no data is removed unless list is given \`fields\` (keeps only those top-level keys per item).`,
   inputSchema,
   handler: async (ctx, input) => {
     const parsed = inputSchema.parse(input);
@@ -43,7 +52,7 @@ export const noticesTool: ToolDefinition<typeof inputSchema> = {
           `/api/v4/projects/${parsed.project_id}/groups/${parsed.group_id}/notices`,
           { query },
         )) as Record<string, unknown>;
-        return withPagination(payload, { page: parsed.page, perPage: parsed.per_page });
+        return listResult(payload, parsed);
       }
       case 'get':
         return ctx.client.request(

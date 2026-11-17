@@ -1,6 +1,6 @@
 {
   "name": "airbrake_projects",
-  "description": "Airbrake projects: list, get, list_activities (audit log). Project updates are intentionally NOT modeled here — the /api/v4/projects/:id update endpoint requires dashboard-session credentials, not Personal API tokens, and returns 401 for all tokens our MCP supports. Use the Airbrake dashboard to change project settings. List results include `_pagination.has_more`/`next_page`. Returns the raw Airbrake JSON payload — no data is removed.",
+  "description": "Airbrake projects: list, get, list_activities (audit log). Project updates are intentionally NOT modeled here — the /api/v4/projects/:id update endpoint requires dashboard-session credentials, not Personal API tokens, and returns 401 for all tokens our MCP supports. Use the Airbrake dashboard to change project settings. List results include `_pagination.has_more`/`next_page`. Returns the raw Airbrake JSON payload — no data is removed unless list/list_activities is given `fields` (keeps only those top-level keys per item).",
   "inputSchema": {
     "type": "object",
     "properties": {
@@ -11,6 +11,16 @@
           "get",
           "list_activities"
         ]
+      },
+      "fields": {
+        "description": "List actions only: keep just these top-level keys (exact names as Airbrake returns them, e.g. [\"id\",\"createdAt\"]) on each listed item. Omit for the full payload.",
+        "minItems": 1,
+        "maxItems": 50,
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1
+        }
       },
       "page": {
         "default": 1,

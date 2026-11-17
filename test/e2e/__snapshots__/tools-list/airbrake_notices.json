@@ -1,6 +1,6 @@
 {
   "name": "airbrake_notices",
-  "description": "Airbrake notices (individual error occurrences). list and get_status are documented; get hits an undocumented dashboard endpoint that currently works on hosted Airbrake. group_id and notice_id MUST be passed as strings (19-digit snowflakes). List results include `_pagination.has_more`/`next_page`. Returns the raw Airbrake JSON payload — no data is removed.",
+  "description": "Airbrake notices (individual error occurrences). list and get_status are documented; get hits an undocumented dashboard endpoint that currently works on hosted Airbrake. group_id and notice_id MUST be passed as strings (19-digit snowflakes). List results include `_pagination.has_more`/`next_page`. Returns the raw Airbrake JSON payload — no data is removed unless list is given `fields` (keeps only those top-level keys per item).",
   "inputSchema": {
     "type": "object",
     "properties": {
@@ -11,6 +11,16 @@
           "get",
           "get_status"
         ]
+      },
+      "fields": {
+        "description": "List actions only: keep just these top-level keys (exact names as Airbrake returns them, e.g. [\"id\",\"createdAt\"]) on each listed item. Omit for the full payload.",
+        "minItems": 1,
+        "maxItems": 50,
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1
+        }
       },
       "project_id": {
         "type": "integer",
@@ -30,7 +40,7 @@
         "exclusiveMinimum": 0
       },
       "per_page": {
-        "default": 50,
+        "default": 10,
         "type": "integer",
         "minimum": 1,
         "maximum": 200

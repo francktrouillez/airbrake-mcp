@@ -20,6 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the length of the primary list and flagged with
   `has_more_is_estimate: true`; if there is no list either, the fields are
   omitted. Existing `page`/`per_page`/`count` fields are unchanged.
+- Optional `fields` (1–50 non-empty key names) on every list-type action —
+  `airbrake_projects` `list`/`list_activities`, `airbrake_groups` `list`,
+  `airbrake_notices` `list`, `airbrake_deploys` `list`,
+  `airbrake_sourcemaps` `list`. Each item of every top-level array in the
+  payload is reduced to those top-level keys; `count`, `_pagination` and
+  other non-array properties are untouched. Omitting `fields` keeps the raw
+  payload.
 
 ### Changed
 
@@ -54,6 +61,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Invalid arguments for airbrake_groups:\n✖ Invalid input: expected string, received number\n  → at group_id`.
   Clients that parsed the old JSON error array should match on the text
   instead.
+- Tool results are now serialised as compact JSON (no indentation), cutting
+  ~38% of the bytes of every response. Error texts are unchanged.
+- `airbrake_notices` `list` now defaults to `per_page: 10` (was 50; max is
+  still 200) since every notice carries a full backtrace/context/params.
+  Pass `per_page` explicitly to get the old page size.
 
 ### Fixed
 
