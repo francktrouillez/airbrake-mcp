@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `airbrake_groups` `get_stats` accepts an optional `limit` (1–1000;
+  Airbrake defaults to 100), sent only when given.
+
 ### Changed
 
 - CI's dependency audit is now `scripts/audit.mjs` (`npm run audit:ci`) instead
@@ -74,6 +79,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   connect timeout, and `ENETUNREACH`/`EHOSTUNREACH`/`ETIMEDOUT` raised by
   `connect`). If the connection retries run out, the error says the request
   was not sent.
+- `airbrake_groups` `get_stats` now matches Airbrake's documented contract:
+  `time__lt` is optional (omitted from the request so Airbrake defaults it
+  to now), and `time__gte` / `time__lt` accept Unix seconds (non-negative
+  integer, as in the docs, or a digit-only string) as well as ISO 8601
+  strings. Values are
+  forwarded verbatim. Malformed timestamps (e.g. `"yesterday"`,
+  `2026-02-30`), negative/fractional/millisecond numbers, and ranges where
+  `time__gte >= time__lt` are rejected before any HTTP request (offset-less
+  times are read as UTC for that check). Note: strings were previously
+  forwarded unvalidated; anything that is not an ISO 8601 / RFC 3339 date
+  or date-time is now rejected.
 
 ### Security
 

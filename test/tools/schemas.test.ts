@@ -146,6 +146,12 @@ describe('schemas: wired into every tool branch', () => {
   };
   // Branch fields that are legitimately looser (optional) than the shared schema.
   const optionalFields = new Set(['airbrake_groups.list.deploy_id']);
+  // Branch fields with a deliberately different schema, tested on their own:
+  // get_stats time bounds also accept Unix seconds (see groups.test.ts).
+  const ownSchemaFields = new Set([
+    'airbrake_groups.get_stats.time__gte',
+    'airbrake_groups.get_stats.time__lt',
+  ]);
   const corpus: unknown[] = [
     undefined,
     ...['3741526488590376432', Number('3741526488590376432'), '../x', '..', '', '1/2'],
@@ -167,8 +173,9 @@ describe('schemas: wired into every tool branch', () => {
       const actual = o.shape[field] as z.ZodTypeAny | undefined;
       if (!actual) continue;
       const path = `${label}.${field}`;
-      seenFields.add(field);
       seenPaths.add(path);
+      if (ownSchemaFields.has(path)) continue;
+      seenFields.add(field);
       const expected = optionalFields.has(path) ? shape.optional() : shape;
       it(path, () => {
         for (const v of corpus) {
@@ -182,7 +189,7 @@ describe('schemas: wired into every tool branch', () => {
 
   it('found every shared field, and every optionalFields entry still exists', () => {
     expect([...seenFields].sort()).toEqual(Object.keys(shared).sort());
-    expect([...optionalFields].filter((p) => !seenPaths.has(p))).toEqual([]);
+    expect([...optionalFields, ...ownSchemaFields].filter((p) => !seenPaths.has(p))).toEqual([]);
   });
 
   it('leaves no *_id field outside the shared validators', () => {
