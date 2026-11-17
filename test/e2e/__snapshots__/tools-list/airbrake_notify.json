@@ -1,0 +1,39 @@
+{
+  "name": "airbrake_notify",
+  "description": "Send a notice (error report) TO Airbrake via the Notifier API. Requires AIRBRAKE_PROJECT_KEYS[project_id] to be set. Returns the raw Airbrake JSON payload — no data is removed.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "const": "notify"
+      },
+      "project_id": {
+        "type": "integer",
+        "exclusiveMinimum": 0
+      },
+      "payload": {
+        "type": "object",
+        "properties": {
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": {}
+            }
+          }
+        },
+        "required": [
+          "errors"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "additionalProperties": false,
+    "required": [
+      "action",
+      "project_id",
+      "payload"
+    ]
+  }
+}

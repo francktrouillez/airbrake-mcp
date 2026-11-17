@@ -1,11 +1,12 @@
 import { z } from 'zod';
 import { AirbrakeConfigError } from '../client/errors.js';
+import { projectId } from './schemas.js';
 import type { ToolDefinition } from './types.js';
 
 const inputSchema = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('notify'),
-    project_id: z.number().int().positive(),
+    project_id: projectId,
     payload: z.object({ errors: z.array(z.record(z.unknown())) }).passthrough(),
   }),
 ]);

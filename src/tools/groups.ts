@@ -1,23 +1,10 @@
 import { z } from 'zod';
 import { withPagination } from '../client/pagination.js';
+import { pageSchema, projectId, snowflakeId, statsTimeRange } from './schemas.js';
 import type { ToolDefinition } from './types.js';
 
-const pageSchema = z.object({
-  page: z.number().int().positive().default(1),
-  per_page: z.number().int().min(1).max(200).default(50),
-});
-
-// Airbrake group/deploy IDs are 19-digit snowflakes that exceed
-// Number.MAX_SAFE_INTEGER. They MUST be passed as strings — the JSON
-// number representation loses precision (the last 3-5 digits get rounded
-// to zero) and the lookup 404s. The /^\d+$/ regex also blocks path
-// traversal: these IDs are interpolated raw into URL paths and fetch
-// normalizes `..` segments, so an unconstrained string would let a
-// jailbroken LLM redirect destructive verbs to arbitrary URL paths.
-const snowflakeId = z.string().regex(/^\d+$/, 'must be a numeric snowflake ID (digits only)');
-
 const groupRef = z.object({
-  project_id: z.number().int().positive(),
+  project_id: projectId,
   group_id: snowflakeId,
 });
 
@@ -25,7 +12,7 @@ const inputSchema = z.discriminatedUnion('action', [
   z
     .object({
       action: z.literal('list'),
-      project_id: z.number().int().positive(),
+      project_id: projectId,
       environment: z.string().optional(),
       resolved: z.boolean().optional(),
       muted: z.boolean().optional(),
@@ -42,12 +29,8 @@ const inputSchema = z.discriminatedUnion('action', [
     .merge(pageSchema),
   z.object({ action: z.literal('get') }).merge(groupRef),
   z
-    .object({
-      action: z.literal('get_stats'),
-      time__gte: z.string().describe('ISO 8601 timestamp lower bound (required)'),
-      time__lt: z.string().describe('ISO 8601 timestamp upper bound (required)'),
-      period: z.enum(['minute', 'hour', 'day']).describe('Bucket granularity (required)'),
-    })
+    .object({ action: z.literal('get_stats') })
+    .merge(statsTimeRange)
     .merge(groupRef),
   z.object({ action: z.literal('resolve') }).merge(groupRef),
   z.object({ action: z.literal('unresolve') }).merge(groupRef),

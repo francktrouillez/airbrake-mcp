@@ -29,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   so the two must be bumped together). `src/bin.ts` is excluded from unit
   coverage — it is exercised by the e2e suite. The lcov report is uploaded as
   a CI artifact from the Node 22 leg.
+- Internal: shared schema module (`src/tools/schemas.ts`) replaces per-tool
+  copies of the ID, pagination and time-range schemas; no behaviour change.
 
 ### Security
 

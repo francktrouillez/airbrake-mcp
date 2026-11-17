@@ -1,0 +1,62 @@
+{
+  "name": "airbrake_performance",
+  "description": "Airbrake APM data (v5). routes_stats: overall route latency/throughput (optional route/method/query filters). queries_stats: DB queries — REQUIRES a `route` filter. queues_stats: background jobs — REQUIRES a `queue` filter. All actions require time__gte, time__lt, and period (\"minute\"|\"hour\"|\"day\"); optional environment everywhere. Returns the raw Airbrake JSON payload — no data is removed.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": [
+          "routes_stats",
+          "queries_stats",
+          "queues_stats"
+        ]
+      },
+      "project_id": {
+        "type": "integer",
+        "exclusiveMinimum": 0
+      },
+      "route": {
+        "type": "string"
+      },
+      "method": {
+        "type": "string"
+      },
+      "query": {
+        "type": "string"
+      },
+      "time__gte": {
+        "type": "string",
+        "description": "ISO 8601 timestamp lower bound (required)"
+      },
+      "time__lt": {
+        "type": "string",
+        "description": "ISO 8601 timestamp upper bound (required)"
+      },
+      "period": {
+        "type": "string",
+        "enum": [
+          "minute",
+          "hour",
+          "day"
+        ],
+        "description": "Bucket granularity (required)"
+      },
+      "environment": {
+        "type": "string"
+      },
+      "queue": {
+        "type": "string",
+        "description": "Required. Background-job queue name (e.g. \"default\"). The endpoint returns 400 \"no joins to apply JoinOn\" without it."
+      }
+    },
+    "additionalProperties": false,
+    "required": [
+      "action",
+      "project_id",
+      "time__gte",
+      "time__lt",
+      "period"
+    ]
+  }
+}

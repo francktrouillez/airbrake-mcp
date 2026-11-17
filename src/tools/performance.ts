@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { projectId, statsTimeRange } from './schemas.js';
 import type { ToolDefinition } from './types.js';
 
 // Mapping from action name to the actual v5 endpoint segment.
@@ -10,10 +11,7 @@ const ENDPOINTS = {
   queues_stats: 'queues-stats',
 } as const;
 
-const baseTimeRange = z.object({
-  time__gte: z.string().describe('ISO 8601 timestamp lower bound (required)'),
-  time__lt: z.string().describe('ISO 8601 timestamp upper bound (required)'),
-  period: z.enum(['minute', 'hour', 'day']).describe('Bucket granularity (required)'),
+const baseTimeRange = statsTimeRange.extend({
   environment: z.string().optional(),
 });
 
@@ -21,7 +19,7 @@ const inputSchema = z.discriminatedUnion('action', [
   z
     .object({
       action: z.literal('routes_stats'),
-      project_id: z.number().int().positive(),
+      project_id: projectId,
       route: z.string().optional(),
       method: z.string().optional(),
       query: z.string().optional(),
@@ -30,7 +28,7 @@ const inputSchema = z.discriminatedUnion('action', [
   z
     .object({
       action: z.literal('queries_stats'),
-      project_id: z.number().int().positive(),
+      project_id: projectId,
       route: z
         .string()
         .describe(
@@ -43,7 +41,7 @@ const inputSchema = z.discriminatedUnion('action', [
   z
     .object({
       action: z.literal('queues_stats'),
-      project_id: z.number().int().positive(),
+      project_id: projectId,
       queue: z
         .string()
         .describe(
