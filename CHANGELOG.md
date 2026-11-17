@@ -27,6 +27,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   payload is reduced to those top-level keys; `count`, `_pagination` and
   other non-array properties are untouched. Omitting `fields` keeps the raw
   payload.
+- **`airbrake_sourcemaps` `upload` action.** Uploads a local source map
+  (`file_path`, `name`, optional `pattern`) as multipart/form-data — no more
+  hand-building a multipart string for `airbrake_request`. Before any HTTP
+  request, `file_path` must be absolute (no Windows UNC/device paths) and
+  end in `.map`, and must resolve (symlinks followed) to a regular `*.map`
+  file of at most 50 MiB whose content is a source map v3; `name`/`pattern`
+  are trimmed and must be non-empty, ≤ 2048 chars and free of CR/LF. This
+  stops a prompt-injected model from exfiltrating arbitrary local files.
+  Upload attempts get a timeout of at least 55 s. Like every `POST`, an
+  upload is never re-sent after a network error, timeout or 5xx (only 429
+  and connection failures before sending are retried), so a lost response
+  cannot create a duplicate map; such errors say the request may have been
+  applied, and the tool description says to check `list` first.
+- HTTP client request options: a `FormData` body is passed to `fetch` as-is
+  (fetch sets the multipart boundary, any caller content-type is dropped)
+  and re-sent in full on retries; `minTimeoutMs` raises the per-attempt
+  timeout for one request.
 
 ### Changed
 

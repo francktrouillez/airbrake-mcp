@@ -23,8 +23,19 @@ export class ResponseTooLargeError extends Error {
 
 export interface RequestOptions {
   query?: Record<string, string | number | boolean | undefined>;
+  /**
+   * - `FormData`: sent as multipart/form-data; fetch generates the boundary,
+   *   so any caller-supplied content-type is dropped.
+   * - `string`: sent verbatim; caller controls content-type via `headers`.
+   * - anything else: JSON-serialized with `content-type: application/json`.
+   */
   body?: unknown;
   headers?: Record<string, string>;
+  /**
+   * Raise the per-attempt timeout to at least this many ms for this request
+   * (the effective timeout is max(config.timeoutMs, minTimeoutMs)).
+   */
+  minTimeoutMs?: number;
   /** 'bearer' (default) uses AIRBRAKE_USER_TOKEN; 'none' omits Authorization (notifier path) */
   auth?: 'bearer' | 'none';
 }
@@ -84,36 +95,47 @@ function sanitizeUserHeaders(input: Record<string, string> | undefined): Record<
   return out;
 }
 
+interface EncodedBody {
+  body: string | FormData | undefined;
+  headers: Record<string, string>;
+}
+
+// Encodes the request body and returns the headers that must accompany it.
+// FormData is passed through untouched: fetch serializes it fresh on every
+// call (it is not a one-shot stream), so retries re-send the complete body,
+// and fetch sets `content-type: multipart/form-data; boundary=…` itself — a
+// caller-supplied content-type would carry the wrong boundary, so drop it.
+function encodeBody(input: unknown, headers: Record<string, string>): EncodedBody {
+  if (input === undefined) return { body: undefined, headers };
+  if (input instanceof FormData) {
+    const withoutContentType = Object.fromEntries(
+      Object.entries(headers).filter(([k]) => k !== 'content-type'),
+    );
+    return { body: input, headers: withoutContentType };
+  }
+  if (typeof input === 'string') return { body: input, headers };
+  return {
+    body: JSON.stringify(input),
+    headers: { 'content-type': 'application/json', ...headers },
+  };
+}
+
 export class AirbrakeClient {
   constructor(private readonly config: Config) {}
 
   async request(method: HttpMethod, path: string, options: RequestOptions = {}): Promise<unknown> {
     const url = `${this.config.host}${path}${buildQuery(options.query)}`;
-    const headers: Record<string, string> = {
+    if (options.auth !== 'none' && !this.config.userToken) {
+      throw new AirbrakeApiError(401, method, path, {
+        message: 'AIRBRAKE_USER_TOKEN env var is required',
+      });
+    }
+    const { body, headers } = encodeBody(options.body, {
       accept: 'application/json',
       ...sanitizeUserHeaders(options.headers),
-    };
-    if (options.auth !== 'none') {
-      if (!this.config.userToken) {
-        throw new AirbrakeApiError(401, method, path, {
-          message: 'AIRBRAKE_USER_TOKEN env var is required',
-        });
-      }
-      headers.authorization = `Bearer ${this.config.userToken}`;
-    }
-    let body: string | undefined;
-    if (options.body !== undefined) {
-      if (typeof options.body === 'string') {
-        // Pre-formed payload (e.g. multipart, plain text, raw JSON).
-        // Caller controls Content-Type via options.headers.
-        body = options.body;
-      } else {
-        if (!('content-type' in headers)) {
-          headers['content-type'] = 'application/json';
-        }
-        body = JSON.stringify(options.body);
-      }
-    }
+      ...(options.auth !== 'none' ? { authorization: `Bearer ${this.config.userToken}` } : {}),
+    });
+    const timeoutMs = Math.max(this.config.timeoutMs, options.minTimeoutMs ?? 0);
 
     const init: RequestInit = { method, headers };
     if (body !== undefined) init.body = body;
@@ -125,7 +147,7 @@ export class AirbrakeClient {
     let attempt = 0;
     while (true) {
       const canRetry = attempt < this.config.maxRetries;
-      const outcome = await this.attempt(method, path, url, init, canRetry);
+      const outcome = await this.attempt(method, path, url, init, timeoutMs, canRetry);
       if (outcome.kind === 'done') return parseResponse(outcome, method, path);
       let delayMs: number;
       if (outcome.kind === 'retry') {
@@ -150,9 +172,9 @@ export class AirbrakeClient {
     path: string,
     url: string,
     init: RequestInit,
+    timeoutMs: number,
     canRetry: boolean,
   ): Promise<AttemptOutcome> {
-    const { timeoutMs } = this.config;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     let response: Response | undefined;
