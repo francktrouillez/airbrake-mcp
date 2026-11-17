@@ -92,14 +92,76 @@ describe('MCP server integration', () => {
     expect(result.content[0].text).toContain('"projects"');
   });
 
+  it('serialises tool results as compact JSON (no indentation/newlines)', async () => {
+    const payload = { projects: [{ id: 1, name: 'p', nested: { a: [1, 2] } }], count: 1 };
+    nock('https://api.airbrake.io').get('/api/v4/projects').query(true).reply(200, payload);
+    const server = await createServer({ AIRBRAKE_USER_TOKEN: 'tok' });
+    const handler = getHandler(server, CallToolRequestSchema.shape.method.value);
+    const result = (await handler(
+      {
+        method: 'tools/call',
+        params: { name: 'airbrake_projects', arguments: { action: 'list' } },
+      },
+      {},
+    )) as { isError?: boolean; content: { text: string }[] };
+    const text = result.content[0]!.text;
+    expect(result.isError).toBeUndefined();
+    expect(text).not.toContain('\n');
+    expect(text).not.toMatch(/": /);
+    expect(text).toBe(JSON.stringify(JSON.parse(text)));
+    expect(JSON.parse(text)).toMatchObject(payload);
+  });
+
+  it('exposes an optional `fields` string array on every tool with a list action', async () => {
+    const server = await createServer({ AIRBRAKE_USER_TOKEN: 'tok' });
+    const handler = getHandler(server, ListToolsRequestSchema.shape.method.value);
+    const result = (await handler({ method: 'tools/list', params: {} }, {})) as {
+      tools: { name: string; description: string; inputSchema: Record<string, unknown> }[];
+    };
+    for (const name of [
+      'airbrake_projects',
+      'airbrake_groups',
+      'airbrake_notices',
+      'airbrake_deploys',
+      'airbrake_sourcemaps',
+    ]) {
+      const tool = result.tools.find((t) => t.name === name)!;
+      const props = tool.inputSchema.properties as Record<string, Record<string, unknown>>;
+      expect(props.fields, `${name} missing fields`).toMatchObject({
+        type: 'array',
+        items: { type: 'string', minLength: 1 },
+        minItems: 1,
+        maxItems: 50,
+      });
+      expect((tool.inputSchema.required as string[] | undefined) ?? []).not.toContain('fields');
+      expect(tool.description).toMatch(/fields/);
+    }
+  });
+
+  it('documents the notices default page size of 10 in the schema', async () => {
+    const server = await createServer({ AIRBRAKE_USER_TOKEN: 'tok' });
+    const handler = getHandler(server, ListToolsRequestSchema.shape.method.value);
+    const result = (await handler({ method: 'tools/list', params: {} }, {})) as {
+      tools: { name: string; inputSchema: Record<string, unknown> }[];
+    };
+    const notices = result.tools.find((t) => t.name === 'airbrake_notices')!;
+    const props = notices.inputSchema.properties as Record<string, Record<string, unknown>>;
+    expect(props.per_page).toMatchObject({ default: 10, maximum: 200 });
+    const groups = result.tools.find((t) => t.name === 'airbrake_groups')!;
+    const gprops = groups.inputSchema.properties as Record<string, Record<string, unknown>>;
+    expect(gprops.per_page).toMatchObject({ default: 50, maximum: 200 });
+  });
+
   it('returns isError on unknown tool', async () => {
     const server = await createServer({ AIRBRAKE_USER_TOKEN: 'tok' });
     const handler = getHandler(server, CallToolRequestSchema.shape.method.value);
     const result = (await handler(
       { method: 'tools/call', params: { name: 'nope', arguments: {} } },
       {},
-    )) as { isError: boolean };
+    )) as { isError: boolean; content: { text: string }[] };
     expect(result.isError).toBe(true);
+    // Error texts are plain messages, not JSON.
+    expect(result.content[0]!.text).toBe('unknown tool: nope');
   });
 
   it('returns isError when handler throws (e.g., Airbrake 4xx)', async () => {

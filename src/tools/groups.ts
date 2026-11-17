@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { PAGINATION_HINT, withPagination } from '../client/pagination.js';
+import { PAGINATION_HINT } from '../client/pagination.js';
+import { fieldsSchema, listResult } from './fields.js';
 import { pageSchema, projectId, snowflakeId } from './schemas.js';
 import type { ToolDefinition } from './types.js';
 
@@ -79,6 +80,7 @@ const inputSchema = z
     z
       .object({
         action: z.literal('list'),
+        fields: fieldsSchema,
         project_id: projectId,
         environment: z.string().optional(),
         resolved: z.boolean().optional(),
@@ -137,7 +139,7 @@ const inputSchema = z
 
 export const groupsTool: ToolDefinition<typeof inputSchema> = {
   name: 'airbrake_groups',
-  description: `Airbrake error groups (issues). Actions: list with filters, get, mute, unmute, delete, get_stats (v5 time-series; requires time__gte and period, optional time__lt (defaults to now) and limit; times are Unix seconds or ISO 8601). resolve/unresolve follow the mute/unmute PUT convention but are not in the public docs — fall back to airbrake_request if they fail on your instance. group_id and deploy_id MUST be passed as strings (they are 19-digit snowflakes that lose precision as JS numbers). ${PAGINATION_HINT} Returns the raw Airbrake JSON payload — no data is removed.`,
+  description: `Airbrake error groups (issues). Actions: list with filters, get, mute, unmute, delete, get_stats (v5 time-series; requires time__gte and period, optional time__lt (defaults to now) and limit; times are Unix seconds or ISO 8601). resolve/unresolve follow the mute/unmute PUT convention but are not in the public docs — fall back to airbrake_request if they fail on your instance. group_id and deploy_id MUST be passed as strings (they are 19-digit snowflakes that lose precision as JS numbers). ${PAGINATION_HINT} Returns the raw Airbrake JSON payload — no data is removed unless list is given \`fields\` (keeps only those top-level keys per item).`,
   inputSchema,
   handler: async (ctx, input) => {
     const parsed = inputSchema.parse(input);
@@ -161,7 +163,7 @@ export const groupsTool: ToolDefinition<typeof inputSchema> = {
           `/api/v4/projects/${parsed.project_id}/groups`,
           { query },
         )) as Record<string, unknown>;
-        return withPagination(payload, { page: parsed.page, perPage: parsed.per_page });
+        return listResult(payload, parsed);
       }
       case 'get':
         return ctx.client.request(

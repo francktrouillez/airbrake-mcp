@@ -1,10 +1,13 @@
 import { z } from 'zod';
-import { PAGINATION_HINT, withPagination } from '../client/pagination.js';
+import { PAGINATION_HINT } from '../client/pagination.js';
+import { fieldsSchema, listResult } from './fields.js';
 import { pageSchema, projectId, snowflakeId } from './schemas.js';
 import type { ToolDefinition } from './types.js';
 
 const inputSchema = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('list'), project_id: projectId }).extend(pageSchema.shape),
+  z
+    .object({ action: z.literal('list'), fields: fieldsSchema, project_id: projectId })
+    .extend(pageSchema.shape),
   z.object({
     action: z.literal('get'),
     project_id: projectId,
@@ -19,7 +22,7 @@ const inputSchema = z.discriminatedUnion('action', [
 
 export const deploysTool: ToolDefinition<typeof inputSchema> = {
   name: 'airbrake_deploys',
-  description: `Airbrake deploys: list, get, or create a deploy marker. deploy_id MUST be passed as a string (19-digit snowflake). ${PAGINATION_HINT} Returns the raw Airbrake JSON payload — no data is removed.`,
+  description: `Airbrake deploys: list, get, or create a deploy marker. deploy_id MUST be passed as a string (19-digit snowflake). ${PAGINATION_HINT} Returns the raw Airbrake JSON payload — no data is removed unless list is given \`fields\` (keeps only those top-level keys per item).`,
   inputSchema,
   handler: async (ctx, input) => {
     const parsed = inputSchema.parse(input);
@@ -30,7 +33,7 @@ export const deploysTool: ToolDefinition<typeof inputSchema> = {
           `/api/v4/projects/${parsed.project_id}/deploys`,
           { query: { page: parsed.page, per_page: parsed.per_page } },
         )) as Record<string, unknown>;
-        return withPagination(payload, { page: parsed.page, perPage: parsed.per_page });
+        return listResult(payload, parsed);
       }
       case 'get':
         return ctx.client.request(

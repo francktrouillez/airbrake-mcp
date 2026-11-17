@@ -110,7 +110,21 @@ To enable the notifier (sending errors TO Airbrake), add the project keys map:
 | `airbrake_sourcemaps` | `list`, `get`, `delete` | Upload is multipart/form-data — use `airbrake_request` with a pre-formed multipart body. |
 | `airbrake_request` | `request` | Escape hatch for any endpoint. Supports `auth: 'none'` (project-key endpoints), raw string bodies (multipart), arbitrary headers and query. |
 
-Tools return raw Airbrake JSON payloads with no field-stripping. List actions add a `_pagination` metadata object so the model can iterate pages.
+Tools return raw Airbrake JSON payloads with no field-stripping by default. List actions add a `_pagination` metadata object so the model can iterate pages.
+
+### Keeping responses small
+
+Every tool result is serialised as **compact JSON** (no indentation or newlines) — whitespace costs tokens and carries no information for the model.
+
+**`airbrake_notices` `list` defaults to `per_page: 10`** (max 200) because each notice carries a full backtrace, context, environment, session and params. All other list actions default to 50.
+
+Every list-type action (`airbrake_projects` `list` / `list_activities`, `airbrake_groups` `list`, `airbrake_notices` `list`, `airbrake_deploys` `list`, `airbrake_sourcemaps` `list`) accepts an optional **`fields`** array (1–50 non-empty key names). When given, each object in every top-level array of the payload (`groups`, `notices`, `deploys`, …) is reduced to just those top-level keys; missing keys are omitted. Non-array properties such as `count` and `_pagination` are kept as-is. Without `fields`, the payload is returned unchanged.
+
+```json
+{ "action": "list", "project_id": 123, "fields": ["id", "errors", "noticeCount", "lastNoticeAt"] }
+```
+
+For a realistic page of notices (~30-frame backtraces plus context/params), the result text drops from ~768 KB (pretty-printed, 50 per page — the previous behaviour) to ~95 KB (compact, 10 per page) and ~7 KB with `fields: ["id", "createdAt", "context"]`.
 
 ### ID precision — strings only for snowflakes
 
