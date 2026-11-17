@@ -1,6 +1,6 @@
 {
   "name": "airbrake_groups",
-  "description": "Airbrake error groups (issues). Actions: list with filters, get, mute, unmute, delete, get_stats (v5 time-series; requires time__gte/time__lt/period). resolve/unresolve follow the mute/unmute PUT convention but are not in the public docs — fall back to airbrake_request if they fail on your instance. group_id and deploy_id MUST be passed as strings (they are 19-digit snowflakes that lose precision as JS numbers). Returns the raw Airbrake JSON payload — no data is removed.",
+  "description": "Airbrake error groups (issues). Actions: list with filters, get, mute, unmute, delete, get_stats (v5 time-series; requires time__gte and period, optional time__lt (defaults to now) and limit; times are Unix seconds or ISO 8601). resolve/unresolve follow the mute/unmute PUT convention but are not in the public docs — fall back to airbrake_request if they fail on your instance. group_id and deploy_id MUST be passed as strings (they are 19-digit snowflakes that lose precision as JS numbers). Returns the raw Airbrake JSON payload — no data is removed.",
   "inputSchema": {
     "type": "object",
     "properties": {
@@ -74,12 +74,30 @@
         "pattern": "^\\d+$"
       },
       "time__gte": {
-        "type": "string",
-        "description": "ISO 8601 timestamp lower bound (required)"
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 253402300799
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Inclusive lower bound (required for get_stats). Either Unix seconds as an integer (e.g. 1699485224, the format shown in Airbrake's docs; a digit-only string is read the same way) or an ISO 8601 string (e.g. 2026-05-17T00:00:00Z). Sent to Airbrake exactly as given."
       },
       "time__lt": {
-        "type": "string",
-        "description": "ISO 8601 timestamp upper bound (required)"
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 253402300799
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Exclusive upper bound (optional; omit to let Airbrake default to the current time). Either Unix seconds as an integer (e.g. 1699485224, the format shown in Airbrake's docs; a digit-only string is read the same way) or an ISO 8601 string (e.g. 2026-05-17T00:00:00Z). Sent to Airbrake exactly as given."
       },
       "period": {
         "type": "string",
@@ -88,7 +106,13 @@
           "hour",
           "day"
         ],
-        "description": "Bucket granularity (required)"
+        "description": "Bucket granularity (required for get_stats). Airbrake's docs list `minute` and `hour`; `day` is not in the public docs and is kept for backward compatibility (use `hour` if your instance rejects it)."
+      },
+      "limit": {
+        "description": "Maximum number of buckets to return (optional; Airbrake defaults to 100)",
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 1000
       }
     },
     "additionalProperties": false,
