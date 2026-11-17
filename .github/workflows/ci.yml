@@ -35,3 +35,5 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run validate
+      # dist/ was built above; skip the rebuild that `test:e2e` does locally.
+      - run: npm run test:e2e:run
