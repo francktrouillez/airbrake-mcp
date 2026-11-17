@@ -1,9 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import nock from 'nock';
+import { PassThrough } from 'node:stream';
 import {
   AirbrakeClient,
   MAX_RESPONSE_BYTES,
   MAX_RETRY_DELAY_MS,
+  ResponseTooLargeError,
   backoffMs,
   parseRetryAfter,
   readBodyWithLimit,
@@ -146,14 +148,196 @@ describe('AirbrakeClient', () => {
     expect(Math.min(MAX_RETRY_DELAY_MS, huge!)).toBe(MAX_RETRY_DELAY_MS);
   });
 
-  it('rejects oversized response body via Content-Length', async () => {
+  it('rejects oversized response body via Content-Length without retrying', async () => {
+    // Only one interceptor: a retry would hit nock's "no match" and surface
+    // as AirbrakeNetworkError instead.
     nock('https://api.airbrake.io')
       .get('/api/v4/projects')
       .reply(200, 'x', { 'Content-Length': String(MAX_RESPONSE_BYTES + 1) });
-    const client = new AirbrakeClient({ ...baseConfig, maxRetries: 0 });
-    await expect(client.request('GET', '/api/v4/projects')).rejects.toBeInstanceOf(
-      AirbrakeApiError,
-    );
+    const client = new AirbrakeClient({ ...baseConfig, maxRetries: 2 });
+    await expect(client.request('GET', '/api/v4/projects')).rejects.toMatchObject({
+      name: 'AirbrakeApiError',
+      status: 200,
+    });
+  });
+
+  describe('request timeout', () => {
+    const PROJECTS = '/api/v4/projects';
+    const api = (): nock.Scope => nock('https://api.airbrake.io');
+    const client = (timeoutMs: number, maxRetries: number): AirbrakeClient =>
+      new AirbrakeClient({ ...baseConfig, timeoutMs, maxRetries });
+    const failure = (c: AirbrakeClient, path: string = PROJECTS): Promise<unknown> =>
+      c.request('GET', path).then(
+        () => expect.fail('expected the request to reject'),
+        (e: unknown) => e,
+      );
+
+    // A body that sends a partial JSON chunk and then never ends — the
+    // "headers arrive, then the server stalls mid-body" failure mode.
+    const stalledBody = (): PassThrough => {
+      const s = new PassThrough();
+      s.write('{"projects":[');
+      return s;
+    };
+
+    afterEach(() => {
+      // Drop nock's pending `.delay()` timers so they don't try to answer a
+      // request the client has already aborted.
+      nock.abortPendingRequests();
+      vi.restoreAllMocks();
+    });
+
+    it('applies the deadline to a body that stalls after the headers', async () => {
+      api().get(PROJECTS).reply(200, stalledBody);
+      const started = Date.now();
+      const err = await failure(client(200, 0));
+      expect(err).toBeInstanceOf(AirbrakeNetworkError);
+      expect(err).not.toBeInstanceOf(AirbrakeApiError);
+      expect((err as Error).message).toBe(
+        'Airbrake network error on GET /api/v4/projects: ' +
+          'request timed out after 200ms while reading the HTTP 200 response body',
+      );
+      expect(Date.now() - started).toBeLessThan(2000);
+    });
+
+    it('retries a body-stage timeout and returns the subsequent success', async () => {
+      const scope = api()
+        .get(PROJECTS)
+        .reply(200, stalledBody)
+        .get(PROJECTS)
+        .reply(200, { projects: [{ id: 1 }] });
+      await expect(client(200, 1).request('GET', PROJECTS)).resolves.toEqual({
+        projects: [{ id: 1 }],
+      });
+      expect(scope.isDone()).toBe(true);
+    });
+
+    it('surfaces a body-stage timeout after exhausting retries', async () => {
+      const scope = api().get(PROJECTS).times(2).reply(200, stalledBody);
+      const err = await failure(client(150, 1));
+      expect((err as Error).message).toMatch(/request timed out after 150ms/);
+      expect(scope.isDone()).toBe(true);
+    });
+
+    it('keeps the HTTP status in the error when a final error response stalls', async () => {
+      api().get(PROJECTS).reply(503, stalledBody);
+      const err = await failure(client(150, 0));
+      expect(err).toBeInstanceOf(AirbrakeNetworkError);
+      expect((err as Error).message).toMatch(
+        /timed out after 150ms while reading the HTTP 503 response body/,
+      );
+    });
+
+    it('cancels the unread body of a retried 5xx without waiting for it', async () => {
+      // The 503 body stalls forever; the retry must not wait for it (it is
+      // cancelled, not read), so this resolves well inside the 2s deadline.
+      api()
+        .get(PROJECTS)
+        .reply(503, stalledBody, { 'Retry-After': '0' })
+        .get(PROJECTS)
+        .reply(200, { projects: [] });
+      const cancelSpy = vi.spyOn(ReadableStream.prototype, 'cancel');
+      const started = Date.now();
+      await expect(client(2000, 1).request('GET', PROJECTS)).resolves.toEqual({ projects: [] });
+      expect(Date.now() - started).toBeLessThan(1000);
+      expect(cancelSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('reports a header-stage timeout with the configured duration', async () => {
+      api().get(PROJECTS).delay(5000).reply(200, { projects: [] });
+      const err = await failure(client(200, 0));
+      expect(err).toBeInstanceOf(AirbrakeNetworkError);
+      expect((err as Error).message).toBe(
+        'Airbrake network error on GET /api/v4/projects: request timed out after 200ms',
+      );
+    });
+
+    it('wraps a connection failure mid-body as AirbrakeNetworkError', async () => {
+      api()
+        .get(PROJECTS)
+        .reply(200, () => {
+          const s = stalledBody();
+          setTimeout(() => s.destroy(new Error('socket hang up')), 20);
+          return s;
+        });
+      const err = await failure(client(5000, 0));
+      expect(err).toBeInstanceOf(AirbrakeNetworkError);
+      expect(err).not.toBeInstanceOf(AirbrakeApiError);
+      expect((err as Error).message).toMatch(/while reading the HTTP 200 response body/);
+      expect((err as Error).message).not.toMatch(/timed out/);
+    });
+
+    it('still succeeds when a slow body completes within the deadline', async () => {
+      api()
+        .get(PROJECTS)
+        .delayBody(100)
+        .reply(200, { projects: [{ id: 2 }] });
+      await expect(client(1000, 0).request('GET', PROJECTS)).resolves.toEqual({
+        projects: [{ id: 2 }],
+      });
+    });
+
+    describe('abort timer lifecycle', () => {
+      // A distinctive timeout value identifies the client's abort timers among
+      // any other timers nock or undici schedule.
+      const TRACKED_MS = 377;
+      let setSpy: { mock: { calls: unknown[][]; results: { value: unknown }[] } };
+      let clearSpy: { mock: { calls: unknown[][] } };
+      const armed = (): unknown[] =>
+        setSpy.mock.results
+          .filter((_, i) => setSpy.mock.calls[i]?.[1] === TRACKED_MS)
+          .map((r) => r.value);
+      const isCleared = (timer: unknown): boolean =>
+        clearSpy.mock.calls.some((c) => c[0] === timer);
+
+      beforeEach(() => {
+        setSpy = vi.spyOn(globalThis, 'setTimeout');
+        clearSpy = vi.spyOn(globalThis, 'clearTimeout');
+      });
+
+      it('clears every attempt timer on success, error, retry and timeout paths', async () => {
+        api()
+          .get(PROJECTS)
+          .reply(503, '', { 'Retry-After': '0' })
+          .get(PROJECTS)
+          .reply(200, { projects: [] })
+          .get('/api/v4/projects/1')
+          .reply(404, { message: 'nope' })
+          .get('/api/v4/projects/2')
+          .replyWithError('ECONNRESET')
+          .get('/api/v4/projects/3')
+          .reply(200, stalledBody);
+        const c = client(TRACKED_MS, 1);
+
+        await c.request('GET', PROJECTS); // 503 then 200
+        await failure(c, '/api/v4/projects/1'); // 404
+        await failure(c, '/api/v4/projects/2'); // ECONNRESET, then "no match" on retry
+        await failure(c, '/api/v4/projects/3'); // body timeout, then "no match" on retry
+
+        expect(armed()).toHaveLength(7);
+        for (const timer of armed()) expect(isCleared(timer)).toBe(true);
+      });
+
+      it('keeps the deadline armed until the body has been fully read', async () => {
+        let clearedBeforeBodyEnd: boolean | undefined;
+        api()
+          .get(PROJECTS)
+          .reply(200, () => {
+            const s = stalledBody();
+            setTimeout(() => {
+              clearedBeforeBodyEnd = isCleared(armed()[0]);
+              s.end(']}');
+            }, 50);
+            return s;
+          });
+        await expect(client(TRACKED_MS, 0).request('GET', PROJECTS)).resolves.toEqual({
+          projects: [],
+        });
+        expect(clearedBeforeBodyEnd).toBe(false);
+        expect(armed()).toHaveLength(1);
+        expect(isCleared(armed()[0])).toBe(true);
+      });
+    });
   });
 
   describe('readBodyWithLimit helper', () => {
@@ -169,6 +353,11 @@ describe('AirbrakeClient', () => {
       const big = 'a'.repeat(tinyCap + 1);
       const resp = new Response(big);
       await expect(readBodyWithLimit(resp, tinyCap)).rejects.toThrow(/exceeds 16 bytes/);
+    });
+
+    it('signals the cap with ResponseTooLargeError (mapped to AirbrakeApiError, not a network error)', async () => {
+      const resp = new Response('a'.repeat(32));
+      await expect(readBodyWithLimit(resp, 16)).rejects.toBeInstanceOf(ResponseTooLargeError);
     });
 
     it('rejects upfront on oversized Content-Length', async () => {
