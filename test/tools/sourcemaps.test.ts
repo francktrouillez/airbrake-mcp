@@ -26,6 +26,23 @@ describe('airbrake_sourcemaps', () => {
     expect(r).toMatchObject({ sourcemaps: [], _pagination: { page: 1, per_page: 50 } });
   });
 
+  it('list with count on the last page → has_more false, no next_page', async () => {
+    nock('https://api.airbrake.io')
+      .get('/api/v4/projects/1/sourcemaps')
+      .query({ page: '2', per_page: '50' })
+      .reply(200, { sourcemaps: [{ id: SOURCEMAP_ID }], count: 51 });
+    const r = (await sourcemapsTool.handler(ctx(), { action: 'list', project_id: 1, page: 2 })) as {
+      _pagination: Record<string, unknown>;
+    };
+    expect(r._pagination).toEqual({
+      page: 2,
+      per_page: 50,
+      count: 51,
+      has_more: false,
+      total_pages: 2,
+    });
+  });
+
   it('get with string sourcemap_id', async () => {
     nock('https://api.airbrake.io')
       .get(`/api/v4/projects/1/sourcemaps/${SOURCEMAP_ID}`)

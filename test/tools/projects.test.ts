@@ -24,6 +24,39 @@ describe('airbrake_projects', () => {
     expect(r).toMatchObject({ projects: [], _pagination: { page: 2, per_page: 25 } });
   });
 
+  it('list → reports has_more/next_page/total_pages from count', async () => {
+    nock('https://api.airbrake.io')
+      .get('/api/v4/projects')
+      .query({ page: '1', per_page: '2' })
+      .reply(200, { projects: [{ id: 1 }, { id: 2 }], count: 5 });
+    const r = await projectsTool.handler(ctx(), { action: 'list', page: 1, per_page: 2 });
+    expect(r).toMatchObject({
+      _pagination: { page: 1, per_page: 2, count: 5, has_more: true, next_page: 2, total_pages: 3 },
+    });
+  });
+
+  it('list_activities → estimates has_more when count is absent', async () => {
+    nock('https://api.airbrake.io')
+      .get('/api/v4/projects/42/activities')
+      .query({ page: '3', per_page: '2' })
+      .reply(200, { activities: [{ id: 1 }, { id: 2 }] });
+    const r = await projectsTool.handler(ctx(), {
+      action: 'list_activities',
+      project_id: 42,
+      page: 3,
+      per_page: 2,
+    });
+    expect(r).toMatchObject({
+      _pagination: {
+        page: 3,
+        per_page: 2,
+        has_more: true,
+        next_page: 4,
+        has_more_is_estimate: true,
+      },
+    });
+  });
+
   it('get → GET /api/v4/projects/:id', async () => {
     nock('https://api.airbrake.io')
       .get('/api/v4/projects/42')

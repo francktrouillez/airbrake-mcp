@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { withPagination } from '../client/pagination.js';
+import { PAGINATION_HINT, withPagination } from '../client/pagination.js';
 import { pageSchema, projectId, snowflakeId } from './schemas.js';
 import type { ToolDefinition } from './types.js';
 
@@ -137,8 +137,7 @@ const inputSchema = z
 
 export const groupsTool: ToolDefinition<typeof inputSchema> = {
   name: 'airbrake_groups',
-  description:
-    'Airbrake error groups (issues). Actions: list with filters, get, mute, unmute, delete, get_stats (v5 time-series; requires time__gte and period, optional time__lt (defaults to now) and limit; times are Unix seconds or ISO 8601). resolve/unresolve follow the mute/unmute PUT convention but are not in the public docs — fall back to airbrake_request if they fail on your instance. group_id and deploy_id MUST be passed as strings (they are 19-digit snowflakes that lose precision as JS numbers). Returns the raw Airbrake JSON payload — no data is removed.',
+  description: `Airbrake error groups (issues). Actions: list with filters, get, mute, unmute, delete, get_stats (v5 time-series; requires time__gte and period, optional time__lt (defaults to now) and limit; times are Unix seconds or ISO 8601). resolve/unresolve follow the mute/unmute PUT convention but are not in the public docs — fall back to airbrake_request if they fail on your instance. group_id and deploy_id MUST be passed as strings (they are 19-digit snowflakes that lose precision as JS numbers). ${PAGINATION_HINT} Returns the raw Airbrake JSON payload — no data is removed.`,
   inputSchema,
   handler: async (ctx, input) => {
     const parsed = inputSchema.parse(input);

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { withPagination } from '../client/pagination.js';
+import { PAGINATION_HINT, withPagination } from '../client/pagination.js';
 import { pageSchema, projectId, snowflakeId } from './schemas.js';
 import type { ToolDefinition } from './types.js';
 
@@ -19,8 +19,7 @@ const inputSchema = z.discriminatedUnion('action', [
 
 export const deploysTool: ToolDefinition<typeof inputSchema> = {
   name: 'airbrake_deploys',
-  description:
-    'Airbrake deploys: list, get, or create a deploy marker. deploy_id MUST be passed as a string (19-digit snowflake). Returns the raw Airbrake JSON payload — no data is removed.',
+  description: `Airbrake deploys: list, get, or create a deploy marker. deploy_id MUST be passed as a string (19-digit snowflake). ${PAGINATION_HINT} Returns the raw Airbrake JSON payload — no data is removed.`,
   inputSchema,
   handler: async (ctx, input) => {
     const parsed = inputSchema.parse(input);

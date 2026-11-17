@@ -1,18 +1,19 @@
 import { z } from 'zod';
-import { withPagination } from '../client/pagination.js';
+import { PAGINATION_HINT, withPagination } from '../client/pagination.js';
 import { pageSchema, projectId } from './schemas.js';
 import type { ToolDefinition } from './types.js';
 
 const inputSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('list') }).extend(pageSchema.shape),
   z.object({ action: z.literal('get'), project_id: projectId }),
-  z.object({ action: z.literal('list_activities'), project_id: projectId }).extend(pageSchema.shape),
+  z
+    .object({ action: z.literal('list_activities'), project_id: projectId })
+    .extend(pageSchema.shape),
 ]);
 
 export const projectsTool: ToolDefinition<typeof inputSchema> = {
   name: 'airbrake_projects',
-  description:
-    'Airbrake projects: list, get, list_activities (audit log). Project updates are intentionally NOT modeled here — the /api/v4/projects/:id update endpoint requires dashboard-session credentials, not Personal API tokens, and returns 401 for all tokens our MCP supports. Use the Airbrake dashboard to change project settings. Returns the raw Airbrake JSON payload — no data is removed.',
+  description: `Airbrake projects: list, get, list_activities (audit log). Project updates are intentionally NOT modeled here — the /api/v4/projects/:id update endpoint requires dashboard-session credentials, not Personal API tokens, and returns 401 for all tokens our MCP supports. Use the Airbrake dashboard to change project settings. ${PAGINATION_HINT} Returns the raw Airbrake JSON payload — no data is removed.`,
   inputSchema,
   handler: async (ctx, input) => {
     const parsed = inputSchema.parse(input);

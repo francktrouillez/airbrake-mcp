@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `airbrake_groups` `get_stats` accepts an optional `limit` (1–1000;
   Airbrake defaults to 100), sent only when given.
+- `_pagination` on list results now reports `has_more` and, when true,
+  `next_page`, so the model no longer has to do arithmetic to decide whether
+  to fetch another page. When Airbrake returns `count`, `has_more` compares
+  the items actually served so far against it (so a page capped below
+  `per_page` still reports more) and `total_pages` is added. When `count` is
+  absent (or not a finite, non-negative number), `has_more` is inferred from
+  the length of the primary list and flagged with
+  `has_more_is_estimate: true`; if there is no list either, the fields are
+  omitted. Existing `page`/`per_page`/`count` fields are unchanged.
 
 ### Changed
 
@@ -90,6 +99,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   times are read as UTC for that check). Note: strings were previously
   forwarded unvalidated; anything that is not an ISO 8601 / RFC 3339 date
   or date-time is now rejected.
+- List actions no longer throw when Airbrake answers with an empty body or
+  204: the `null` payload is returned as-is.
 
 ### Security
 
