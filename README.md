@@ -140,6 +140,7 @@ npm run typecheck
 npm run lint
 npm run build            # emits dist/
 npm run validate         # spawns the built server, checks tool schemas (expects 8 tools)
+npm run test:e2e         # builds, then drives dist/bin.js over stdio against a local mock Airbrake
 npm run dev              # tsx src/bin.ts (for local stdio testing)
 npm run audit:ci         # dependency audit gate (what CI runs)
 ```
