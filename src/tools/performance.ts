@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { projectId, statsTimeRange } from './schemas.js';
+import { READ_ONLY_HINTS } from './read-only.js';
 import type { ToolDefinition } from './types.js';
 
 // Mapping from action name to the actual v5 endpoint segment.
@@ -53,9 +54,11 @@ const inputSchema = z.discriminatedUnion('action', [
 
 export const performanceTool: ToolDefinition<typeof inputSchema> = {
   name: 'airbrake_performance',
+  title: 'Read Airbrake APM performance stats',
   description:
     'Airbrake APM data (v5). routes_stats: overall route latency/throughput (optional route/method/query filters). queries_stats: DB queries — REQUIRES a `route` filter. queues_stats: background jobs — REQUIRES a `queue` filter. All actions require time__gte, time__lt, and period ("minute"|"hour"|"day"); optional environment everywhere. Returns the raw Airbrake JSON payload — no data is removed.',
   inputSchema,
+  annotations: READ_ONLY_HINTS,
   handler: async (ctx, input) => {
     const parsed = inputSchema.parse(input);
     const { action, project_id, ...filters } = parsed;

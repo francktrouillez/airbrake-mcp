@@ -74,17 +74,16 @@ describe('airbrake_deploys', () => {
     }
   });
 
-  it('create → POST with FLAT body (no { deploy: ... } wrapper)', async () => {
-    // Verified against live Airbrake: the wrapped payload silently creates
-    // an empty deploy marker; the flat payload persists all fields.
-    nock('https://api.airbrake.io')
-      .post('/api/v4/projects/1/deploys', { environment: 'prod', revision: 'abc123' })
-      .reply(201, { id: '6' });
-    const r = await deploysTool.handler(ctx(), {
-      action: 'create',
-      project_id: 1,
-      deploy: { environment: 'prod', revision: 'abc123' },
-    });
-    expect(r).toEqual({ id: '6' });
+  it('no longer accepts the create action (moved to airbrake_deploys_create)', async () => {
+    await expect(
+      deploysTool.handler(ctx(), {
+        // @ts-expect-error: create was removed from the read-only tool
+        action: 'create',
+        project_id: 1,
+        deploy: { environment: 'prod' },
+      }),
+    ).rejects.toThrow(
+      'airbrake_deploys no longer supports action "create": use airbrake_deploys_create',
+    );
   });
 });

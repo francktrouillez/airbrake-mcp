@@ -108,8 +108,8 @@ describe('e2e: built server over stdio', () => {
   });
 
   it('rejects invalid input before any HTTP request is made', async () => {
-    const res = await mcp.call('airbrake_groups', {
-      action: 'delete',
+    const res = await mcp.call('airbrake_delete', {
+      resource: 'group',
       project_id: 42,
       group_id: '../../admin',
     });

@@ -1,0 +1,42 @@
+{
+  "name": "airbrake_groups_update",
+  "title": "Update Airbrake error group state",
+  "description": "Change the state of an Airbrake error group: mute, unmute, resolve, unresolve (PUT, no body). resolve/unresolve follow the mute/unmute PUT convention but are not in the public docs — fall back to airbrake_request if they fail on your instance. group_id MUST be passed as a string (19-digit snowflake). Disabled when AIRBRAKE_READ_ONLY is set. Returns the raw Airbrake JSON payload — no data is removed.",
+  "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+      "project_id": {
+        "type": "integer",
+        "exclusiveMinimum": 0
+      },
+      "group_id": {
+        "type": "string",
+        "pattern": "^\\d+$"
+      },
+      "action": {
+        "type": "string",
+        "enum": [
+          "mute",
+          "unmute",
+          "resolve",
+          "unresolve"
+        ],
+        "description": "State change to apply to the group"
+      }
+    },
+    "required": [
+      "project_id",
+      "group_id",
+      "action"
+    ],
+    "additionalProperties": false
+  },
+  "annotations": {
+    "title": "Update Airbrake error group state",
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": true
+  }
+}

@@ -1,5 +1,6 @@
 {
   "name": "airbrake_request",
+  "title": "Raw Airbrake API request",
   "description": "Escape hatch: send a raw request to any Airbrake API endpoint. Use when no resource-specific tool covers what you need, or for project-key / multipart endpoints. Returns the raw Airbrake JSON payload — no data is removed.",
   "inputSchema": {
     "$schema": "http://json-schema.org/draft-07/schema#",
@@ -53,5 +54,12 @@
       "path"
     ],
     "additionalProperties": false
+  },
+  "annotations": {
+    "title": "Raw Airbrake API request",
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "openWorldHint": true
   }
 }

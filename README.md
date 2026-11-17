@@ -7,7 +7,7 @@
 
 An MCP (Model Context Protocol) server that exposes the Airbrake public API to LLM clients. Works with any MCP-compatible client (Claude Desktop, Claude Code, Cursor, Cline, Codex CLI, Continue.dev, etc.).
 
-Eight resource-grouped tools cover what hosted Airbrake actually exposes (projects, error groups, notices, deploys, v5 APM, source maps, the v3 Notifier), plus a generic `airbrake_request` escape hatch for endpoints not directly modeled — including project-key endpoints and multipart uploads.
+Twelve tools cover what hosted Airbrake actually exposes (projects, error groups, notices, deploys, v5 APM, source maps, the v3 Notifier), plus a generic `airbrake_request` escape hatch for endpoints not directly modeled — including project-key endpoints and multipart uploads. Tools are split by side effect and carry MCP [tool annotations](#tool-annotations), so clients can auto-approve reads and flag deletes; an optional [read-only mode](#read-only-mode) hides every write.
 
 **Unofficial. Not affiliated with or endorsed by Airbrake.**
 
@@ -41,13 +41,14 @@ It will wait for JSON-RPC messages on stdin. Useful for debugging the install on
 
 All configuration is via environment variables.
 
-| Var | Required | Default | Purpose |
-|---|---|---|---|
-| `AIRBRAKE_USER_TOKEN` | yes (except for notify-only setups) | — | Bearer token for the management API |
-| `AIRBRAKE_PROJECT_KEYS` | only for `airbrake_notify` | — | JSON map `{"123":"notifier_key"}` |
-| `AIRBRAKE_HOST` | no | `https://api.airbrake.io` | Override for self-hosted Airbrake or Errbit |
-| `AIRBRAKE_TIMEOUT_MS` | no | `15000` | Per-request timeout in ms (including the response body read); applies to each retry attempt |
-| `AIRBRAKE_MAX_RETRIES` | no | `2` | Retries on 429 and failed connections (all methods), and on 5xx/network errors/timeouts for GET/HEAD/PUT only |
+| Var                     | Required                            | Default                   | Purpose                                                                                                                                                |
+| ----------------------- | ----------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `AIRBRAKE_USER_TOKEN`   | yes (except for notify-only setups) | —                         | Bearer token for the management API                                                                                                                    |
+| `AIRBRAKE_PROJECT_KEYS` | only for `airbrake_notify`          | —                         | JSON map `{"123":"notifier_key"}`                                                                                                                      |
+| `AIRBRAKE_HOST`         | no                                  | `https://api.airbrake.io` | Override for self-hosted Airbrake or Errbit                                                                                                            |
+| `AIRBRAKE_TIMEOUT_MS`   | no                                  | `15000`                   | Per-request timeout in ms (including the response body read); applies to each retry attempt                                                            |
+| `AIRBRAKE_MAX_RETRIES`  | no                                  | `2`                       | Retries on 429 and failed connections (all methods), and on 5xx/network errors/timeouts for GET/HEAD/PUT only                                          |
+| `AIRBRAKE_READ_ONLY`    | no                                  | off                       | `1`/`true`/`yes` enables [read-only mode](#read-only-mode); `0`/`false`/`no`/empty disables it (case-insensitive). Any other value is a startup error. |
 
 Get a User API token from Airbrake → User Settings → Personal API tokens.
 
@@ -71,14 +72,14 @@ The MCP entry below is the same for every MCP client — only the config file lo
 
 Where to put it, by client:
 
-| Client | Location |
-|---|---|
-| **Claude Desktop** (macOS) | `~/Library/Application Support/Claude/claude_desktop_config.json` |
-| **Claude Code** | `~/.claude.json` — or use `claude mcp add airbrake --scope user --env AIRBRAKE_USER_TOKEN=… -- npx -y airbrake-mcp` |
-| **Cursor** | `.cursor/mcp.json` (per-project) or `~/.cursor/mcp.json` (user-wide) |
-| **Cline (VS Code)** | VS Code Settings → Cline → MCP servers (UI), or `cline_mcp_settings.json` |
-| **Codex CLI** | `~/.codex/config.json` under `mcpServers` |
-| **Continue.dev** | `.continue/config.json` under `experimental.modelContextProtocolServers` |
+| Client                     | Location                                                                                                            |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| **Claude Desktop** (macOS) | `~/Library/Application Support/Claude/claude_desktop_config.json`                                                   |
+| **Claude Code**            | `~/.claude.json` — or use `claude mcp add airbrake --scope user --env AIRBRAKE_USER_TOKEN=… -- npx -y airbrake-mcp` |
+| **Cursor**                 | `.cursor/mcp.json` (per-project) or `~/.cursor/mcp.json` (user-wide)                                                |
+| **Cline (VS Code)**        | VS Code Settings → Cline → MCP servers (UI), or `cline_mcp_settings.json`                                           |
+| **Codex CLI**              | `~/.codex/config.json` under `mcpServers`                                                                           |
+| **Continue.dev**           | `.continue/config.json` under `experimental.modelContextProtocolServers`                                            |
 
 To enable the notifier (sending errors TO Airbrake), add the project keys map:
 
@@ -99,16 +100,20 @@ To enable the notifier (sending errors TO Airbrake), add the project keys map:
 
 ## Tools
 
-| Tool | Actions | Notes |
-|---|---|---|
-| `airbrake_projects` | `list`, `get`, `list_activities` | Project updates are not modeled — see the caveat below. |
-| `airbrake_groups` | `list`, `get`, `get_stats`, `mute`, `unmute`, `resolve`, `unresolve`, `delete` | `list` supports `environment`, `resolved`, `muted`, `archived`, `deploy_id`, `start_time`, `end_time`, `order`, `query`. `get_stats` (v5) requires `time__gte` and `period` (`minute`/`hour`; `day` is also accepted by the tool for backward compatibility but is not in Airbrake's public docs); `time__lt` is optional (Airbrake defaults it to now) and `limit` (1–1000, default 100) is optional. Times are Unix seconds (integer or digit string) or ISO 8601 strings, forwarded as given. `resolve`/`unresolve` follow the documented mute PUT convention; fall back to `airbrake_request` if your instance disagrees. |
-| `airbrake_notices` | `list`, `get`, `get_status` | `list` and `get_status` are documented; `get` calls an undocumented endpoint that currently works on hosted Airbrake. |
-| `airbrake_deploys` | `list`, `get`, `create` | All documented. |
-| `airbrake_performance` | `routes_stats`, `queries_stats`, `queues_stats` | v5 APM. All actions require `time__gte`/`time__lt`/`period` (`minute`\|`hour`\|`day`). **`queries_stats` additionally requires a `route` filter** and **`queues_stats` additionally requires a `queue` filter** — the server returns 400 without them. The GET (read) side of these endpoints is not in Airbrake's public docs (which only show the PUT ingest side) but is live-verified working on hosted Airbrake. `routes-breakdowns` is intentionally not modeled (PUT-only SDK endpoint). |
-| `airbrake_notify` | `notify` | Sends errors TO Airbrake (v3 Notifier API). |
-| `airbrake_sourcemaps` | `list`, `get`, `delete`, `upload` | `upload` reads a local source map file and POSTs it as multipart/form-data — see [Source-map upload](#source-map-upload). |
-| `airbrake_request` | `request` | Escape hatch for any endpoint. Supports `auth: 'none'` (project-key endpoints), raw string bodies (multipart), arbitrary headers and query. |
+| Tool                         | Actions                                         | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ---------------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `airbrake_projects`          | `list`, `get`, `list_activities`                | Read-only. Project updates are not modeled — see the caveat below.                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `airbrake_groups`            | `list`, `get`, `get_stats`                      | Read-only. `list` supports `environment`, `resolved`, `muted`, `archived`, `deploy_id`, `start_time`, `end_time`, `order`, `query`. `get_stats` (v5) requires `time__gte` and `period` (`minute`/`hour`; `day` is also accepted by the tool for backward compatibility but is not in Airbrake's public docs); `time__lt` is optional (Airbrake defaults it to now) and `limit` (1–1000, default 100) is optional. Times are Unix seconds (integer or digit string) or ISO 8601 strings, forwarded as given. |
+| `airbrake_groups_update`     | `mute`, `unmute`, `resolve`, `unresolve`        | PUT to `.../groups/:id/{muted,unmuted,resolved,unresolved}`. `resolve`/`unresolve` follow the documented mute PUT convention; fall back to `airbrake_request` if your instance disagrees.                                                                                                                                                                                                                                                                                                                   |
+| `airbrake_notices`           | `list`, `get`, `get_status`                     | Read-only. `list` and `get_status` are documented; `get` calls an undocumented endpoint that currently works on hosted Airbrake.                                                                                                                                                                                                                                                                                                                                                                            |
+| `airbrake_deploys`           | `list`, `get`                                   | Read-only.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `airbrake_deploys_create`    | —                                               | Creates a deploy marker. Pass the deploy fields as `deploy: {…}`; they are sent at the top level of the POST body.                                                                                                                                                                                                                                                                                                                                                                                          |
+| `airbrake_performance`       | `routes_stats`, `queries_stats`, `queues_stats` | Read-only. v5 APM. All actions require `time__gte`/`time__lt`/`period` (`minute`\|`hour`\|`day`). **`queries_stats` additionally requires a `route` filter** and **`queues_stats` additionally requires a `queue` filter** — the server returns 400 without them. The GET (read) side of these endpoints is not in Airbrake's public docs (which only show the PUT ingest side) but is live-verified working on hosted Airbrake. `routes-breakdowns` is intentionally not modeled (PUT-only SDK endpoint).  |
+| `airbrake_notify`            | `notify`                                        | Sends errors TO Airbrake (v3 Notifier API).                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `airbrake_sourcemaps`        | `list`, `get`                                   | Read-only.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `airbrake_sourcemaps_upload` | —                                               | Reads a local source map file and POSTs it as multipart/form-data — see [Source-map upload](#source-map-upload).                                                                                                                                                                                                                                                                                                                                                                                            |
+| `airbrake_delete`            | `resource: group \| sourcemap`                  | Permanent delete. `resource: "group"` requires `group_id`; `resource: "sourcemap"` requires `sourcemap_id`. Passing the other resource's ID is rejected.                                                                                                                                                                                                                                                                                                                                                    |
+| `airbrake_request`           | —                                               | Escape hatch for any endpoint. Supports `auth: 'none'` (project-key endpoints), raw string bodies (multipart), arbitrary headers and query. GET-only in read-only mode.                                                                                                                                                                                                                                                                                                                                     |
 
 Tools return raw Airbrake JSON payloads with no field-stripping by default. List actions add a `_pagination` metadata object so the model can iterate pages.
 
@@ -126,6 +131,49 @@ Every list-type action (`airbrake_projects` `list` / `list_activities`, `airbrak
 
 For a realistic page of notices (~30-frame backtraces plus context/params), the result text drops from ~768 KB (pretty-printed, 50 per page — the previous behaviour) to ~95 KB (compact, 10 per page) and ~7 KB with `fields: ["id", "createdAt", "context"]`.
 
+### Tool annotations
+
+Every tool advertises a `title` and MCP [`annotations`](https://modelcontextprotocol.io/specification/2025-06-18/server/tools#tool-annotations) in `tools/list`. All hints are set explicitly; `openWorldHint` is `true` everywhere because every tool talks to Airbrake.
+
+| Tool                                                                                                                          | `readOnlyHint` | `destructiveHint` | `idempotentHint` |
+| ----------------------------------------------------------------------------------------------------------------------------- | -------------- | ----------------- | ---------------- |
+| `airbrake_projects`, `airbrake_groups`, `airbrake_notices`, `airbrake_deploys`, `airbrake_performance`, `airbrake_sourcemaps` | `true`         | `false`           | `true`           |
+| `airbrake_groups_update`                                                                                                      | `false`        | `false`           | `true`           |
+| `airbrake_deploys_create`                                                                                                     | `false`        | `false`           | `false`          |
+| `airbrake_sourcemaps_upload`                                                                                                  | `false`        | `false`           | `false`          |
+| `airbrake_notify`                                                                                                             | `false`        | `false`           | `false`          |
+| `airbrake_delete`                                                                                                             | `false`        | `true`            | `true`           |
+| `airbrake_request`                                                                                                            | `false`        | `true`            | `false`          |
+| `airbrake_request` (read-only mode)                                                                                           | `true`         | `false`           | `true`           |
+
+Annotations are hints for the client's approval UX, not a security boundary — use read-only mode if writes must be impossible.
+
+### Read-only mode
+
+Set `AIRBRAKE_READ_ONLY=1` to run the server without any ability to change Airbrake state:
+
+- `airbrake_groups_update`, `airbrake_deploys_create`, `airbrake_sourcemaps_upload`, `airbrake_notify`, and `airbrake_delete` are not listed in `tools/list`, and calling them anyway returns an error (`<tool> is disabled: AIRBRAKE_READ_ONLY is set`) without any HTTP request.
+- `airbrake_request` stays available but GET-only: its advertised `method` enum is `["GET"]` and it has no `body` field. Write methods and a `body` are rejected before any HTTP request, and its annotations become read-only.
+- As a backstop below every tool, the HTTP client refuses anything but a plain GET while read-only mode is on: any other method, method-override headers (`X-HTTP-Method-Override`, `X-HTTP-Method`, `X-Method-Override`), and a `_method` query parameter (whether passed in `query` or embedded in `path`).
+- The server writes a one-line notice to stderr at startup.
+
+```bash
+claude mcp add airbrake --scope user \
+  --env AIRBRAKE_USER_TOKEN=YOUR_TOKEN --env AIRBRAKE_READ_ONLY=1 \
+  -- npx -y airbrake-mcp
+```
+
+### Migrating from 0.1.x
+
+Write and destructive actions moved out of the resource tools into dedicated tools (so each tool's annotations are accurate). The HTTP requests are unchanged.
+
+| Before                                                                                             | After                                                                 |
+| -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `airbrake_groups` `{action: "mute" \| "unmute" \| "resolve" \| "unresolve", project_id, group_id}` | `airbrake_groups_update` with the same arguments                      |
+| `airbrake_groups` `{action: "delete", project_id, group_id}`                                       | `airbrake_delete` `{resource: "group", project_id, group_id}`         |
+| `airbrake_sourcemaps` `{action: "delete", project_id, sourcemap_id}`                               | `airbrake_delete` `{resource: "sourcemap", project_id, sourcemap_id}` |
+| `airbrake_deploys` `{action: "create", project_id, deploy}`                                        | `airbrake_deploys_create` `{project_id, deploy}` (no `action`)        |
+
 ### ID precision — strings only for snowflakes
 
 Airbrake's group/notice/deploy/sourcemap IDs are **19-digit snowflakes** that exceed `Number.MAX_SAFE_INTEGER`. **They MUST be passed as strings**, otherwise JSON parsing (in both the LLM tool-call layer and our zod schema) silently rounds the last 3–5 digits to zero and the lookup 404s.
@@ -134,9 +182,10 @@ The schemas reject numeric IDs explicitly; you'll see a clear zod error if you t
 
 ### Source-map upload
 
+`airbrake_sourcemaps_upload`:
+
 ```json
 {
-  "action": "upload",
   "project_id": 123,
   "file_path": "/abs/path/to/dist/app.min.js.map",
   "name": "https://cdn.example.com/app.min.js",
@@ -146,7 +195,7 @@ The schemas reject numeric IDs explicitly; you'll see a clear zod error if you t
 
 `name` is the minified file URL (or name) the map applies to; `pattern` is an optional SQL `LIKE` pattern matching minified file URLs. The server reads the file itself and builds the multipart request (`file`, `name`, `pattern` parts) — no hand-built multipart body is needed.
 
-Because this action reads a file from the machine running the MCP server and sends it to the Airbrake host, it is locked down so a prompt-injected model cannot use it to exfiltrate arbitrary files. All of the following are enforced **before any HTTP request is made**:
+Because this tool reads a file from the machine running the MCP server and sends it to the Airbrake host, it is locked down so a prompt-injected model cannot use it to exfiltrate arbitrary files. All of the following are enforced **before any HTTP request is made**:
 
 - `file_path` must be absolute and its own file name must end in `.map` (case-insensitive). This is checked before the filesystem is touched, so the tool cannot be used to probe whether arbitrary files exist; missing and unreadable paths get the same error. On Windows, network (UNC, `\\host\share`) and device (`\\?\`, `\\.\`) paths are rejected outright, since merely resolving a UNC path sends the user's NTLM credentials to that host.
 - It must resolve (via `realpath`, following every symlink) to a **regular file** — directories, devices, FIFOs and sockets are rejected — whose **resolved** name also ends in `.map`. A symlink `bundle.js.map → ~/.ssh/id_rsa` is rejected.
@@ -179,7 +228,7 @@ If Airbrake returns neither `count` nor a list, `has_more`/`next_page` are omitt
 
 - **Project updates are not exposed.** The `PUT /api/v4/projects/:id` endpoint requires dashboard-session credentials (cookies + CSRF), not Personal API tokens, and returns 401 from every token shape we tested. Use the Airbrake dashboard to change project settings.
 - **`airbrake_notices.get`** calls an undocumented endpoint. It works on hosted Airbrake today but is not part of the public contract — may break or differ on self-hosted instances and Errbit.
-- **Source-map upload auth.** Airbrake's docs list project-key or user-key auth for `POST /api/v4/projects/:pid/sourcemaps`; `airbrake_sourcemaps` `upload` sends the same `Authorization: Bearer <AIRBRAKE_USER_TOKEN>` as every other management call.
+- **Source-map upload auth.** Airbrake's docs list project-key or user-key auth for `POST /api/v4/projects/:pid/sourcemaps`; `airbrake_sourcemaps_upload` sends the same `Authorization: Bearer <AIRBRAKE_USER_TOKEN>` as every other management call.
 - **`POST /api/v3/projects/:pid/ios-reports`** (iOS crash reports) requires `?key=PROJECT_KEY` and no `Authorization` header. Call via `airbrake_request` with `auth: 'none'` and pass the project key in `query`.
 - **APM write endpoints** (`PUT /api/v5/.../routes-stats` etc.) are SDK-internal; not modeled, but reachable via the escape hatch.
 - **What this MCP intentionally doesn't model:** the Airbrake dashboard exposes endpoints for comments, bookmarks, iframes, personal tokens, project stats, and a cross-project `/api/v4/groups` listing — these all returned 404/401 against hosted Airbrake from a User API token. They were modeled in earlier versions and removed. If your instance does support them, reach for `airbrake_request`.
@@ -193,7 +242,7 @@ npm run test:coverage    # vitest with v8 coverage; fails below the thresholds i
 npm run typecheck
 npm run lint
 npm run build            # emits dist/
-npm run validate         # spawns the built server, checks tool schemas (expects 8 tools)
+npm run validate         # spawns the built server, checks tool schemas (expects 12 tools)
 npm run test:e2e         # builds, then drives dist/bin.js over stdio against a local mock Airbrake
 npm run dev              # tsx src/bin.ts (for local stdio testing)
 npm run audit:ci         # dependency audit gate (what CI runs)
@@ -206,7 +255,7 @@ CI runs `node scripts/audit.mjs` (also available as `npm run audit:ci`) instead 
 It fails on any **high or critical** advisory unless [`audit-allowlist.json`](audit-allowlist.json) has a matching entry, and each entry has to justify itself:
 
 - **`scope`** is `dev` or `runtime`. A `dev` entry only covers an advisory that is absent from the shipped tree (`npm audit --omit=dev`), so a dev-tooling exception can never hide a vulnerability users install. `runtime` entries should be rare and short-lived.
-- **`package`** must name the package npm reports the advisory against, and only covers it if that's the *only* package hit. The GHSA id alone isn't enough, so a mislabeled entry can't get waved through in review.
+- **`package`** must name the package npm reports the advisory against, and only covers it if that's the _only_ package hit. The GHSA id alone isn't enough, so a mislabeled entry can't get waved through in review.
 - **`reason`** says why it's acceptable for now, and what removes it.
 - **`expires`** (`YYYY-MM-DD`): the gate fails after that date, and also when the date is more than **180 days** out for `dev` or **90 days** for `runtime`. Nothing can be waved through indefinitely.
 - **Stale entries fail too.** Once an entry covers nothing, because the advisory was fixed upstream or the dependency was bumped, the gate asks for it to be removed. The list can only shrink back to empty.

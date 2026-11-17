@@ -22,17 +22,21 @@ function getHandler(
 describe('MCP server integration', () => {
   beforeEach(() => nock.cleanAll());
 
-  it('lists all 8 tools', async () => {
+  it('lists all 12 tools', async () => {
     const server = await createServer({ AIRBRAKE_USER_TOKEN: 'tok' });
     const handler = getHandler(server, ListToolsRequestSchema.shape.method.value);
     const result = (await handler({ method: 'tools/list', params: {} }, {})) as {
       tools: { name: string }[];
     };
     const names = result.tools.map((t) => t.name);
-    expect(names).toHaveLength(8);
+    expect(names).toHaveLength(12);
     expect(names).toContain('airbrake_request');
+    expect(names).toContain('airbrake_groups_update');
+    expect(names).toContain('airbrake_deploys_create');
+    expect(names).toContain('airbrake_delete');
     expect(names).toContain('airbrake_notify');
     expect(names).toContain('airbrake_sourcemaps');
+    expect(names).toContain('airbrake_sourcemaps_upload');
     // Removed tools must stay removed.
     for (const removed of [
       'airbrake_account',
@@ -68,11 +72,36 @@ describe('MCP server integration', () => {
     const result = (await handler({ method: 'tools/list', params: {} }, {})) as {
       tools: { name: string; inputSchema: Record<string, unknown> }[];
     };
-    const groups = result.tools.find((t) => t.name === 'airbrake_groups')!;
-    const props = groups.inputSchema.properties as Record<string, { enum?: string[] }>;
-    expect(props.action.enum).toEqual(
-      expect.arrayContaining(['list', 'get', 'mute', 'unmute', 'resolve', 'unresolve', 'delete']),
+    const byName = (n: string) => result.tools.find((t) => t.name === n)!;
+    const enumOf = (n: string, key: string) =>
+      (byName(n).inputSchema.properties as Record<string, { enum?: string[] }>)[key]!.enum;
+    expect(enumOf('airbrake_groups', 'action')).toEqual(['list', 'get', 'get_stats']);
+    expect(enumOf('airbrake_groups_update', 'action')).toEqual([
+      'mute',
+      'unmute',
+      'resolve',
+      'unresolve',
+    ]);
+    expect(enumOf('airbrake_deploys', 'action')).toEqual(['list', 'get']);
+    expect(enumOf('airbrake_sourcemaps', 'action')).toEqual(['list', 'get']);
+  });
+
+  it('airbrake_delete flattens its `resource` discriminator into an enum', async () => {
+    const server = await createServer({ AIRBRAKE_USER_TOKEN: 'tok' });
+    const handler = getHandler(server, ListToolsRequestSchema.shape.method.value);
+    const result = (await handler({ method: 'tools/list', params: {} }, {})) as {
+      tools: { name: string; inputSchema: Record<string, unknown> }[];
+    };
+    const del = result.tools.find((t) => t.name === 'airbrake_delete')!;
+    const props = del.inputSchema.properties as Record<string, { enum?: string[]; type?: string }>;
+    expect(props.resource!.enum).toEqual(['group', 'sourcemap']);
+    expect(props.resource!.type).toBe('string');
+    expect(Object.keys(props).sort()).toEqual(
+      ['group_id', 'project_id', 'resource', 'sourcemap_id'].sort(),
     );
+    // Branch-specific IDs can't be required at the top level; the handler
+    // enforces them at runtime.
+    expect((del.inputSchema.required as string[]).sort()).toEqual(['project_id', 'resource']);
   });
 
   it('routes a tool call to the handler', async () => {

@@ -1,0 +1,32 @@
+{
+  "name": "airbrake_deploys_create",
+  "title": "Create an Airbrake deploy marker",
+  "description": "Create an Airbrake deploy marker for a project. Each call creates a new deploy (not idempotent). Disabled when AIRBRAKE_READ_ONLY is set. Returns the raw Airbrake JSON payload — no data is removed.",
+  "inputSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+      "project_id": {
+        "type": "integer",
+        "exclusiveMinimum": 0
+      },
+      "deploy": {
+        "type": "object",
+        "additionalProperties": {},
+        "description": "Deploy fields, e.g. { environment, username, repository, revision, version }. Sent as the top-level POST body."
+      }
+    },
+    "required": [
+      "project_id",
+      "deploy"
+    ],
+    "additionalProperties": false
+  },
+  "annotations": {
+    "title": "Create an Airbrake deploy marker",
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": true
+  }
+}

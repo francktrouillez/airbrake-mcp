@@ -13,8 +13,16 @@ const inputSchema = z.discriminatedUnion('action', [
 
 export const notifyTool: ToolDefinition<typeof inputSchema> = {
   name: 'airbrake_notify',
+  title: 'Send a notice to Airbrake (Notifier API)',
   description:
-    'Send a notice (error report) TO Airbrake via the Notifier API. Requires AIRBRAKE_PROJECT_KEYS[project_id] to be set. Returns the raw Airbrake JSON payload — no data is removed.',
+    'Send a notice (error report) TO Airbrake via the Notifier API. Requires AIRBRAKE_PROJECT_KEYS[project_id] to be set. Disabled when AIRBRAKE_READ_ONLY is set. Returns the raw Airbrake JSON payload — no data is removed.',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    // Every call records a new notice occurrence.
+    idempotentHint: false,
+    openWorldHint: true,
+  },
   inputSchema,
   handler: async (ctx, input) => {
     const parsed = inputSchema.parse(input);

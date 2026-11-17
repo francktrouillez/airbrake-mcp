@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { PAGINATION_HINT } from '../client/pagination.js';
 import { fieldsSchema, listResult } from './fields.js';
 import { pageSchema, projectId } from './schemas.js';
+import { READ_ONLY_HINTS } from './read-only.js';
 import type { ToolDefinition } from './types.js';
 
 const inputSchema = z.discriminatedUnion('action', [
@@ -14,8 +15,10 @@ const inputSchema = z.discriminatedUnion('action', [
 
 export const projectsTool: ToolDefinition<typeof inputSchema> = {
   name: 'airbrake_projects',
+  title: 'Read Airbrake projects',
   description: `Airbrake projects: list, get, list_activities (audit log). Project updates are intentionally NOT modeled here — the /api/v4/projects/:id update endpoint requires dashboard-session credentials, not Personal API tokens, and returns 401 for all tokens our MCP supports. Use the Airbrake dashboard to change project settings. ${PAGINATION_HINT} Returns the raw Airbrake JSON payload — no data is removed unless list/list_activities is given \`fields\` (keeps only those top-level keys per item).`,
   inputSchema,
+  annotations: READ_ONLY_HINTS,
   handler: async (ctx, input) => {
     const parsed = inputSchema.parse(input);
     switch (parsed.action) {

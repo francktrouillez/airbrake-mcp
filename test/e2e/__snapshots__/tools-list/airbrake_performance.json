@@ -1,5 +1,6 @@
 {
   "name": "airbrake_performance",
+  "title": "Read Airbrake APM performance stats",
   "description": "Airbrake APM data (v5). routes_stats: overall route latency/throughput (optional route/method/query filters). queries_stats: DB queries — REQUIRES a `route` filter. queues_stats: background jobs — REQUIRES a `queue` filter. All actions require time__gte, time__lt, and period (\"minute\"|\"hour\"|\"day\"); optional environment everywhere. Returns the raw Airbrake JSON payload — no data is removed.",
   "inputSchema": {
     "type": "object",
@@ -58,5 +59,12 @@
       "time__lt",
       "period"
     ]
+  },
+  "annotations": {
+    "title": "Read Airbrake APM performance stats",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": true
   }
 }

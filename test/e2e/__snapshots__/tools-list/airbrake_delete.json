@@ -1,0 +1,43 @@
+{
+  "name": "airbrake_delete",
+  "title": "Delete an Airbrake error group or source map",
+  "description": "Permanently delete an Airbrake resource. resource \"group\" requires group_id (deletes the error group and its notices); resource \"sourcemap\" requires sourcemap_id. Pass only the ID for the chosen resource — omit the other one (it is rejected, not ignored). IDs MUST be passed as strings (19-digit snowflakes). Irreversible. Disabled when AIRBRAKE_READ_ONLY is set. Returns the raw Airbrake JSON payload (usually null for 204).",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "resource": {
+        "type": "string",
+        "enum": [
+          "group",
+          "sourcemap"
+        ]
+      },
+      "project_id": {
+        "type": "integer",
+        "exclusiveMinimum": 0
+      },
+      "group_id": {
+        "type": "string",
+        "pattern": "^\\d+$",
+        "description": "Required when resource is \"group\"; omit otherwise"
+      },
+      "sourcemap_id": {
+        "type": "string",
+        "pattern": "^\\d+$",
+        "description": "Required when resource is \"sourcemap\"; omit otherwise"
+      }
+    },
+    "additionalProperties": false,
+    "required": [
+      "resource",
+      "project_id"
+    ]
+  },
+  "annotations": {
+    "title": "Delete an Airbrake error group or source map",
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "idempotentHint": true,
+    "openWorldHint": true
+  }
+}
