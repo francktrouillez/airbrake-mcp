@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-11-18
+
+**Breaking:** write and destructive actions moved to dedicated tools (12
+tools, was 8) so each tool carries accurate MCP annotations; the HTTP
+requests are unchanged. See **Changed** below and the README section
+"Migrating from 0.1.x". Also new: `AIRBRAKE_READ_ONLY` mode, source-map
+upload, `has_more`/`next_page` pagination, `fields` projection, zod 4, and
+safer retries (non-idempotent requests are never re-sent after an ambiguous
+failure).
+
 ### Added
 
 - `airbrake_groups` `get_stats` accepts an optional `limit` (1–1000;
@@ -136,7 +146,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Duplicate side effects from retried non-idempotent requests.** The client
   retried every method on 5xx responses and network errors/timeouts, so a
   `POST` that the server had already processed (e.g. `airbrake_notify`,
-  `airbrake_deploys` `create`, or a `POST` via `airbrake_request`) could be
+  `airbrake_deploys` `create` (now `airbrake_deploys_create`), or a `POST` via
+  `airbrake_request`) could be
   sent again, creating duplicate notices or deploy markers. A retried `DELETE`
   whose first response was lost would get a 404 and report failure for an
   operation that had succeeded. 5xx responses, dropped connections and
@@ -280,7 +291,8 @@ API tokens (and therefore not modeled), and for endpoints we expose that
 aren't in Airbrake's public docs (live-verified working on hosted
 Airbrake but not part of the public contract).
 
-[Unreleased]: https://github.com/francktrouillez/airbrake-mcp/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/francktrouillez/airbrake-mcp/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/francktrouillez/airbrake-mcp/releases/tag/v0.2.0
 [0.1.3]: https://github.com/francktrouillez/airbrake-mcp/releases/tag/v0.1.3
 [0.1.2]: https://github.com/francktrouillez/airbrake-mcp/releases/tag/v0.1.2
 [0.1.1]: https://github.com/francktrouillez/airbrake-mcp/releases/tag/v0.1.1
