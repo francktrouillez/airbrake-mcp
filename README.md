@@ -122,6 +122,19 @@ The schemas reject numeric IDs explicitly; you'll see a clear zod error if you t
 
 Airbrake accepts both `limit` and `per_page` on list endpoints. This MCP standardizes on `page` + `per_page` for consistency across all list actions.
 
+List actions add a `_pagination` object so the model knows whether to fetch another page without doing arithmetic:
+
+| Field                  | When present                               | Meaning                                                                                                                                                                                                           |
+| ---------------------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `page`, `per_page`     | always                                     | The page that was requested.                                                                                                                                                                                      |
+| `count`                | Airbrake returned a numeric `count`        | Total reported by Airbrake (passed through unchanged).                                                                                                                                                            |
+| `has_more`             | `count` present, or the payload has a list | `true` if another page exists. With `count`, it compares the items actually served so far, `(page - 1) * per_page + list.length`, against `count`, so a page Airbrake capped below `per_page` still reports more. |
+| `next_page`            | only when `has_more` is `true`             | `page + 1` — pass it as `page` on the next call.                                                                                                                                                                  |
+| `total_pages`          | `count` present                            | `ceil(count / per_page)` (`0` when `count` is `0`). Assumes Airbrake honoured the requested `per_page`.                                                                                                           |
+| `has_more_is_estimate` | `count` absent and the payload has a list  | `true`: `has_more` was inferred from the first list in the payload (`length >= per_page`), so a full last page may yield one empty follow-up page.                                                                |
+
+If Airbrake returns neither `count` nor a list, `has_more`/`next_page` are omitted rather than guessed. `has_more` errs towards one extra (possibly empty) fetch rather than skipping pages; stop when it is `false`.
+
 ### Coverage caveats
 
 - **Project updates are not exposed.** The `PUT /api/v4/projects/:id` endpoint requires dashboard-session credentials (cookies + CSRF), not Personal API tokens, and returns 401 from every token shape we tested. Use the Airbrake dashboard to change project settings.

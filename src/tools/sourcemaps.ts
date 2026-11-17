@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { withPagination } from '../client/pagination.js';
+import { PAGINATION_HINT, withPagination } from '../client/pagination.js';
 import { pageSchema, projectId, snowflakeId } from './schemas.js';
 import type { ToolDefinition } from './types.js';
 
@@ -19,8 +19,7 @@ const inputSchema = z.discriminatedUnion('action', [
 
 export const sourcemapsTool: ToolDefinition<typeof inputSchema> = {
   name: 'airbrake_sourcemaps',
-  description:
-    'Airbrake source maps: list, get, delete. sourcemap_id MUST be passed as a string. Upload (POST) is multipart/form-data and not modeled here; use airbrake_request with a pre-formed multipart body and matching Content-Type. Returns the raw Airbrake JSON payload — no data is removed.',
+  description: `Airbrake source maps: list, get, delete. sourcemap_id MUST be passed as a string. Upload (POST) is multipart/form-data and not modeled here; use airbrake_request with a pre-formed multipart body and matching Content-Type. ${PAGINATION_HINT} Returns the raw Airbrake JSON payload — no data is removed.`,
   inputSchema,
   handler: async (ctx, input) => {
     const parsed = inputSchema.parse(input);

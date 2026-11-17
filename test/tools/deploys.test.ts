@@ -26,6 +26,23 @@ describe('airbrake_deploys', () => {
     expect(r).toMatchObject({ deploys: [], _pagination: { page: 1, per_page: 50 } });
   });
 
+  it('list without count → has_more is an estimate from the deploys array', async () => {
+    nock('https://api.airbrake.io')
+      .get('/api/v4/projects/1/deploys')
+      .query({ page: '1', per_page: '1' })
+      .reply(200, { deploys: [{ id: DEPLOY_ID }] });
+    const r = await deploysTool.handler(ctx(), { action: 'list', project_id: 1, per_page: 1 });
+    expect(r).toMatchObject({
+      _pagination: {
+        page: 1,
+        per_page: 1,
+        has_more: true,
+        next_page: 2,
+        has_more_is_estimate: true,
+      },
+    });
+  });
+
   it('get with string deploy_id', async () => {
     nock('https://api.airbrake.io')
       .get(`/api/v4/projects/1/deploys/${DEPLOY_ID}`)

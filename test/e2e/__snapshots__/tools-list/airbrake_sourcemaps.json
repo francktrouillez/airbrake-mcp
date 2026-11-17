@@ -1,6 +1,6 @@
 {
   "name": "airbrake_sourcemaps",
-  "description": "Airbrake source maps: list, get, delete. sourcemap_id MUST be passed as a string. Upload (POST) is multipart/form-data and not modeled here; use airbrake_request with a pre-formed multipart body and matching Content-Type. Returns the raw Airbrake JSON payload — no data is removed.",
+  "description": "Airbrake source maps: list, get, delete. sourcemap_id MUST be passed as a string. Upload (POST) is multipart/form-data and not modeled here; use airbrake_request with a pre-formed multipart body and matching Content-Type. List results include `_pagination.has_more`/`next_page`. Returns the raw Airbrake JSON payload — no data is removed.",
   "inputSchema": {
     "type": "object",
     "properties": {

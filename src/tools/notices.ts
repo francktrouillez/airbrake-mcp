@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { withPagination } from '../client/pagination.js';
+import { PAGINATION_HINT, withPagination } from '../client/pagination.js';
 import { noticeUuid, pageSchema, projectId, snowflakeId } from './schemas.js';
 import type { ToolDefinition } from './types.js';
 
@@ -27,8 +27,7 @@ const inputSchema = z.discriminatedUnion('action', [
 
 export const noticesTool: ToolDefinition<typeof inputSchema> = {
   name: 'airbrake_notices',
-  description:
-    'Airbrake notices (individual error occurrences). list and get_status are documented; get hits an undocumented dashboard endpoint that currently works on hosted Airbrake. group_id and notice_id MUST be passed as strings (19-digit snowflakes). Returns the raw Airbrake JSON payload — no data is removed.',
+  description: `Airbrake notices (individual error occurrences). list and get_status are documented; get hits an undocumented dashboard endpoint that currently works on hosted Airbrake. group_id and notice_id MUST be passed as strings (19-digit snowflakes). ${PAGINATION_HINT} Returns the raw Airbrake JSON payload — no data is removed.`,
   inputSchema,
   handler: async (ctx, input) => {
     const parsed = inputSchema.parse(input);

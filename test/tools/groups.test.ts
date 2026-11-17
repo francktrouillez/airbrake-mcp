@@ -59,6 +59,24 @@ describe('airbrake_groups', () => {
     expect(r).toMatchObject({ groups: [], _pagination: { page: 1, per_page: 50 } });
   });
 
+  it('list with count → has_more/next_page/total_pages', async () => {
+    nock('https://api.airbrake.io')
+      .get('/api/v4/projects/1/groups')
+      .query({ page: '2', per_page: '50' })
+      .reply(200, { groups: [{ id: '1' }], count: 120 });
+    const r = await groupsTool.handler(ctx(), { action: 'list', project_id: 1, page: 2 });
+    expect(r).toMatchObject({
+      _pagination: {
+        page: 2,
+        per_page: 50,
+        count: 120,
+        has_more: true,
+        next_page: 3,
+        total_pages: 3,
+      },
+    });
+  });
+
   it('get with string group_id', async () => {
     nock('https://api.airbrake.io')
       .get(`/api/v4/projects/1/groups/${GROUP_ID}`)

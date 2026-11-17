@@ -45,6 +45,24 @@ describe('airbrake_notices', () => {
     expect(r).toMatchObject({ notices: [], _pagination: { page: 1, per_page: 50 } });
   });
 
+  it('list with an empty notices array → has_more false (estimate)', async () => {
+    nock('https://api.airbrake.io')
+      .get(`/api/v4/projects/1/groups/${GROUP_ID}/notices`)
+      .query({ page: '1', per_page: '50' })
+      .reply(200, { notices: [] });
+    const r = await noticesTool.handler(ctx(), {
+      action: 'list',
+      project_id: 1,
+      group_id: GROUP_ID,
+    });
+    expect((r as { _pagination: object })._pagination).toEqual({
+      page: 1,
+      per_page: 50,
+      has_more: false,
+      has_more_is_estimate: true,
+    });
+  });
+
   it('get with string IDs', async () => {
     nock('https://api.airbrake.io')
       .get(`/api/v4/projects/1/groups/${GROUP_ID}/notices/${NOTICE_ID}`)
