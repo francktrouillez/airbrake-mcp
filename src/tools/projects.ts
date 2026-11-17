@@ -4,9 +4,9 @@ import { pageSchema, projectId } from './schemas.js';
 import type { ToolDefinition } from './types.js';
 
 const inputSchema = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('list') }).merge(pageSchema),
+  z.object({ action: z.literal('list') }).extend(pageSchema.shape),
   z.object({ action: z.literal('get'), project_id: projectId }),
-  z.object({ action: z.literal('list_activities'), project_id: projectId }).merge(pageSchema),
+  z.object({ action: z.literal('list_activities'), project_id: projectId }).extend(pageSchema.shape),
 ]);
 
 export const projectsTool: ToolDefinition<typeof inputSchema> = {

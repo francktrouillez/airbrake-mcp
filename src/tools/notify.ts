@@ -7,7 +7,7 @@ const inputSchema = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('notify'),
     project_id: projectId,
-    payload: z.object({ errors: z.array(z.record(z.unknown())) }).passthrough(),
+    payload: z.looseObject({ errors: z.array(z.record(z.string(), z.unknown())) }),
   }),
 ]);
 

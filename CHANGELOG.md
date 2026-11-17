@@ -17,10 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `dev` or 90 for `runtime`. Expired and stale entries also fail. It audits
   the lockfile only, in its own CI job before any install; `release.yml` runs
   it before `npm ci`. Dev, optional and peer dependencies are always included.
-  The two initial
-  entries are `picomatch` GHSA-fc5q-39xc-vjpf (dev-only, no upstream fix;
-  expires 2027-02-17) and `zod` GHSA-mrhx-c7xc-m3w5 (runtime; removed by the
-  zod 4 migration; expires 2027-01-17).
+  The only entry is `picomatch` GHSA-fc5q-39xc-vjpf (dev-only, no upstream
+  fix; expires 2027-02-17); the `zod` advisory is fixed by the zod 4
+  migration (see the zod 4 entry).
 - CI now runs `npm run test:coverage` (new script, `vitest run --coverage`)
   instead of `npm test`, so the coverage thresholds declared in
   `vitest.config.ts` (lines/functions/statements 85%, branches 80%) are
@@ -31,6 +30,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a CI artifact from the Node 22 leg.
 - Internal: shared schema module (`src/tools/schemas.ts`) replaces per-tool
   copies of the ID, pagination and time-range schemas; no behaviour change.
+- Migrated from `zod` 3 to `zod` 4 (`^4.6.7`) and dropped the
+  `zod-to-json-schema` dependency: tool input schemas are now generated with
+  zod 4's native `z.toJSONSchema` (draft-07, input types, everything
+  inlined). The `tools/list` output is semantically unchanged — same tools,
+  descriptions, properties, `action` enums and `required` sets.
+- Tool argument validation errors are now short, readable text instead of a
+  JSON dump of zod issues, e.g.
+  `Invalid arguments for airbrake_groups:\n✖ Invalid input: expected string, received number\n  → at group_id`.
+  Clients that parsed the old JSON error array should match on the text
+  instead.
 
 ### Security
 
@@ -44,11 +53,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   advisories; plus dev-toolchain advisories in `vitest`/`@vitest/mocker`
   (GHSA-82fw-gwwq-j7x9, GHSA-qxg6-89mg-rqv8), `vite`, `postcss`,
   `source-map-js`, `nanoid`, `js-yaml`, `minimatch` and `brace-expansion`.
-  The `vitest` floor is raised to `^4.1.12` (patched release), and the `zod`
-  floor to `^3.25.28` to match the SDK's `zod` peer range (`^3.25 || ^4.0`)
-  and `zod-to-json-schema`'s (`^3.25.28 || ^4`). Still open: `zod` GHSA-mrhx-c7xc-m3w5 (fixed only in zod 4.6.6, tracked
-  separately) and `picomatch` GHSA-fc5q-39xc-vjpf (dev-only, no upstream
-  patch yet).
+  The `vitest` floor is raised to `^4.1.12` (patched release). Still open:
+  `picomatch` GHSA-fc5q-39xc-vjpf (dev-only, no upstream patch yet).
+- Upgrading to `zod` 4.6.7 also remediates GHSA-mrhx-c7xc-m3w5 (memory
+  exhaustion while validating oversized constrained collections, zod
+  `<4.6.6`, high); its `audit-allowlist.json` entry is removed.
 
 ## [0.1.3] — 2026-06-04
 

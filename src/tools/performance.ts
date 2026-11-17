@@ -24,7 +24,7 @@ const inputSchema = z.discriminatedUnion('action', [
       method: z.string().optional(),
       query: z.string().optional(),
     })
-    .merge(baseTimeRange),
+    .extend(baseTimeRange.shape),
   z
     .object({
       action: z.literal('queries_stats'),
@@ -37,7 +37,7 @@ const inputSchema = z.discriminatedUnion('action', [
       method: z.string().optional(),
       query: z.string().optional(),
     })
-    .merge(baseTimeRange),
+    .extend(baseTimeRange.shape),
   z
     .object({
       action: z.literal('queues_stats'),
@@ -48,7 +48,7 @@ const inputSchema = z.discriminatedUnion('action', [
           'Required. Background-job queue name (e.g. "default"). The endpoint returns 400 "no joins to apply JoinOn" without it.',
         ),
     })
-    .merge(baseTimeRange),
+    .extend(baseTimeRange.shape),
 ]);
 
 export const performanceTool: ToolDefinition<typeof inputSchema> = {

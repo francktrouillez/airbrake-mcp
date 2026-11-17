@@ -153,16 +153,20 @@ describe('e2e: tool schemas', () => {
 });
 
 /**
- * The tool error text is the ZodError message (a JSON array of issues). Every
- * issue must point at `field`, so a failure caused by some other argument
- * cannot mask a missing validator on the field under test.
+ * The tool error text is `z.prettifyError` output: one `✖ <message>` line per
+ * issue, followed by `  → at <path>` when the issue has a path. Every issue
+ * must point at `field`, so a failure caused by some other argument cannot
+ * mask a missing validator on the field under test.
  */
 function expectOnlyFieldRejected(res: ToolResult, field: string, label: string): void {
   expect(res.isError, label).toBe(true);
-  const issues = res.json as { path?: unknown[] }[] | undefined;
-  expect(Array.isArray(issues) && issues.length > 0, `${label}: ${res.text}`).toBe(true);
-  expect(
-    issues!.map((i) => i.path?.[0]),
-    label,
-  ).toEqual(issues!.map(() => field));
+  const lines = res.text.split('\n');
+  const issueCount = lines.filter((l) => l.startsWith('✖ ')).length;
+  const paths = lines.flatMap((l) => {
+    const m = /^\s+→ at (.+)$/.exec(l);
+    return m ? [m[1]!.split(/[.[]/)[0]] : [];
+  });
+  expect(issueCount, `${label}: ${res.text}`).toBeGreaterThan(0);
+  expect(paths, `${label}: every issue needs a path`).toHaveLength(issueCount);
+  expect(paths, label).toEqual(paths.map(() => field));
 }

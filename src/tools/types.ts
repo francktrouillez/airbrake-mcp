@@ -7,7 +7,7 @@ export interface ToolContext {
   config: Config;
 }
 
-export interface ToolDefinition<TInput extends z.ZodTypeAny> {
+export interface ToolDefinition<TInput extends z.ZodType> {
   name: string;
   description: string;
   inputSchema: TInput;

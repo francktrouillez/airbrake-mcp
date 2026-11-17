@@ -2,8 +2,7 @@ import { createRequire } from 'node:module';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import type { z } from 'zod';
-import { zodToJsonSchema } from 'zod-to-json-schema';
+import { z } from 'zod';
 import { AirbrakeClient } from './client/airbrake.js';
 import { loadConfig } from './config.js';
 import { allTools } from './tools/index.js';
@@ -17,16 +16,38 @@ const require = createRequire(import.meta.url);
 const { version: PKG_VERSION } = require('../package.json') as { version: string };
 
 // MCP clients (notably Claude) reject tool inputSchemas that use top-level
-// `anyOf` / `oneOf` / `allOf`. Zod's `discriminatedUnion` compiles to
-// `{anyOf: [...]}`, so we flatten the branches into a single object schema:
-// all properties unioned, the `action` discriminator becomes an enum, and
-// `required` is the intersection across branches (since branch-specific
-// requireds aren't enforceable at the top level). Runtime validation still
-// happens inside each tool handler via `inputSchema.parse(input)`.
+// `anyOf` / `oneOf` / `allOf`. Zod 4's `discriminatedUnion` compiles to
+// `{oneOf: [...]}` (a plain `z.union` to `{anyOf: [...]}`), so we flatten the
+// branches into a single object schema: all properties unioned, the
+// discriminator becomes an enum, and `required` is the intersection across
+// branches (since branch-specific requireds aren't enforceable at the top
+// level). Runtime validation still happens inside each tool handler via
+// `inputSchema.parse(input)`.
 
 type JsonObject = Record<string, unknown>;
 
-function mergeAnyOf(branches: unknown[]): JsonObject {
+// Values a discriminator branch accepts: zod emits a single literal as
+// `const` and a multi-value literal / enum as `enum`. `undefined` means the
+// branch leaves the field open (e.g. `z.string()`).
+function literalValues(schema: JsonObject): unknown[] | undefined {
+  if (schema.const !== undefined) return [schema.const];
+  return Array.isArray(schema.enum) ? schema.enum : undefined;
+}
+
+function mergeDiscriminator(existing: JsonObject, incoming: JsonObject): JsonObject {
+  const a = literalValues(existing);
+  const b = literalValues(incoming);
+  // An open branch accepts any value, so the merged field must stay open too.
+  if (!a) return existing;
+  if (!b) return incoming;
+  const values = [...new Set([...a, ...b])];
+  const rest = Object.fromEntries(
+    Object.entries(existing).filter(([key]) => key !== 'const' && key !== 'enum'),
+  );
+  return values.length === 1 ? { ...rest, const: values[0] } : { ...rest, enum: values };
+}
+
+function mergeBranches(branches: unknown[], discriminator: string): JsonObject {
   const properties: JsonObject = {};
   const requiredCounts: Record<string, number> = {};
   let total = 0;
@@ -38,21 +59,12 @@ function mergeAnyOf(branches: unknown[]): JsonObject {
     const branchProps = (b.properties as JsonObject | undefined) ?? {};
     for (const [name, propSchema] of Object.entries(branchProps)) {
       if (!(name in properties)) {
-        properties[name] = JSON.parse(JSON.stringify(propSchema));
-        continue;
-      }
-      if (name === 'action') {
-        const existing = properties[name] as JsonObject;
-        const incoming = propSchema as JsonObject;
-        const incomingVal = incoming.const;
-        if (incomingVal === undefined) continue;
-        if (Array.isArray(existing.enum)) {
-          if (!existing.enum.includes(incomingVal)) existing.enum.push(incomingVal);
-        } else if (existing.const !== undefined) {
-          const old = existing.const;
-          delete existing.const;
-          existing.enum = [old, incomingVal];
-        }
+        properties[name] = propSchema;
+      } else if (name === discriminator) {
+        properties[name] = mergeDiscriminator(
+          properties[name] as JsonObject,
+          propSchema as JsonObject,
+        );
       }
     }
     for (const name of (b.required as string[] | undefined) ?? []) {
@@ -67,14 +79,66 @@ function mergeAnyOf(branches: unknown[]): JsonObject {
   return result;
 }
 
-export function toMcpInputSchema(schema: z.ZodTypeAny): JsonObject {
-  const json = zodToJsonSchema(schema, {
-    target: 'jsonSchema7',
-    $refStrategy: 'none',
+// zod-internal `format` names for `.startsWith()` / `.endsWith()` /
+// `.includes()`: not JSON Schema formats (strict validators reject unknown
+// formats) and redundant with the `pattern` zod emits alongside them.
+const ZOD_PSEUDO_FORMATS = new Set(['starts_with', 'ends_with', 'includes']);
+
+// Per-node `z.toJSONSchema` hook that keeps the output semantically identical
+// to what zod-to-json-schema produced for zod 3:
+//   - closes strip-mode objects (`additionalProperties: false`), which zod 4
+//     only does under `io: "output"`;
+//   - drops zod-internal pseudo-formats (see above);
+//   - drops the +/-Number.MAX_SAFE_INTEGER bounds `.int()` adds;
+//   - drops `propertyNames: {type: "string"}` on records (JSON keys are
+//     always strings).
+function zod3CompatOverride(ctx: {
+  zodSchema: { _zod: { def: unknown } };
+  jsonSchema: JsonObject;
+}): void {
+  const def = ctx.zodSchema._zod.def as { type: string; catchall?: unknown };
+  const json = ctx.jsonSchema;
+  if (def.type === 'object' && def.catchall === undefined) {
+    json.additionalProperties ??= false;
+  }
+  if (typeof json.format === 'string' && ZOD_PSEUDO_FORMATS.has(json.format)) delete json.format;
+  if (json.type === 'integer') {
+    if (json.maximum === Number.MAX_SAFE_INTEGER) delete json.maximum;
+    if (json.minimum === Number.MIN_SAFE_INTEGER) delete json.minimum;
+  }
+  if (JSON.stringify(json.propertyNames) === '{"type":"string"}') delete json.propertyNames;
+}
+
+export function toMcpInputSchema(schema: z.ZodType): JsonObject {
+  const json = z.toJSONSchema(schema, {
+    // Same dialect zod-to-json-schema produced (`jsonSchema7`).
+    target: 'draft-07',
+    // Describe what callers may SEND: defaulted fields (page/per_page) stay
+    // optional instead of being marked required as in the output type.
+    io: 'input',
+    // Inline every subschema — MCP clients reject `$ref` / `definitions`.
+    reused: 'inline',
+    cycles: 'throw',
+    // Fail loudly (at server startup, and in the unit tests over every tool)
+    // rather than silently emitting `{}`, which would advertise "anything
+    // goes" to the client.
+    unrepresentable: 'throw',
+    override: zod3CompatOverride,
   }) as JsonObject;
-  if (Array.isArray(json.anyOf)) return mergeAnyOf(json.anyOf);
+  const branches = Array.isArray(json.oneOf) ? json.oneOf : json.anyOf;
+  if (Array.isArray(branches)) {
+    const { discriminator } = schema._zod.def as { discriminator?: string };
+    return mergeBranches(branches, discriminator ?? 'action');
+  }
   if (json.type === 'object') return json;
   return { type: 'object', ...json };
+}
+
+export function formatToolError(toolName: string, err: unknown): string {
+  if (err instanceof z.ZodError) {
+    return `Invalid arguments for ${toolName}:\n${z.prettifyError(err)}`;
+  }
+  return err instanceof Error ? err.message : String(err);
 }
 
 export async function createServer(
@@ -98,13 +162,15 @@ export async function createServer(
     { capabilities: { tools: {} } },
   );
 
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: allTools.map((t) => ({
-      name: t.name,
-      description: t.description,
-      inputSchema: toMcpInputSchema(t.inputSchema),
-    })),
+  // The tool set is static: convert the schemas once, at startup, so a
+  // schema zod cannot represent fails here instead of on every tools/list.
+  const tools = allTools.map((t) => ({
+    name: t.name,
+    description: t.description,
+    inputSchema: toMcpInputSchema(t.inputSchema),
   }));
+
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }));
 
   server.setRequestHandler(CallToolRequestSchema, async (req) => {
     const tool = allTools.find((t) => t.name === req.params.name);
@@ -118,8 +184,7 @@ export async function createServer(
       const result = await tool.handler(ctx, req.params.arguments ?? {});
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      return { isError: true, content: [{ type: 'text', text: message }] };
+      return { isError: true, content: [{ type: 'text', text: formatToolError(tool.name, err) }] };
     }
   });
 
