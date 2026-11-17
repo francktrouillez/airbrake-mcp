@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- CI's dependency audit is now `scripts/audit.mjs` (`npm run audit:ci`) instead
+  of `npm audit --audit-level=high`. It still fails on every high/critical
+  advisory, except those with a reviewed entry in `audit-allowlist.json`. Each
+  entry is scoped (`dev` entries can never cover a runtime finding), must name
+  the reported package, carries a reason, and must expire within 180 days for
+  `dev` or 90 for `runtime`. Expired and stale entries also fail. It audits
+  the lockfile only, in its own CI job before any install; `release.yml` runs
+  it before `npm ci`. Dev, optional and peer dependencies are always included.
+  The two initial
+  entries are `picomatch` GHSA-fc5q-39xc-vjpf (dev-only, no upstream fix;
+  expires 2027-02-17) and `zod` GHSA-mrhx-c7xc-m3w5 (runtime; removed by the
+  zod 4 migration; expires 2027-01-17).
+
 ### Security
 
 - Raised the `@modelcontextprotocol/sdk` floor from `^1.0.0` to `^1.32.0`
