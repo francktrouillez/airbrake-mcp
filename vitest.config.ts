@@ -9,6 +9,9 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'lcov'],
       include: ['src/**/*.ts'],
+      // bin.ts is the process entry shim (start server, exit 1 on failure) with
+      // no unit-testable logic; test/e2e/bin-startup.e2e.test.ts exercises it.
+      exclude: ['src/bin.ts'],
       thresholds: {
         lines: 85,
         functions: 85,
