@@ -212,6 +212,51 @@ describe('AirbrakeClient', () => {
       expect(scope.isDone()).toBe(true);
     });
 
+    it('never retries a POST whose body read failed: the server already answered', async () => {
+      // Headers arrived, so the request was certainly applied; a body-stage
+      // failure is ambiguous and must go through the method-aware policy.
+      const scope = api().post('/api/v4/projects/1/deploys').reply(201, stalledBody);
+      const err = await client(150, 2)
+        .request('POST', '/api/v4/projects/1/deploys', { body: { environment: 'production' } })
+        .then(
+          () => expect.fail('expected the request to reject'),
+          (e: unknown) => e,
+        );
+      expect(err).toBeInstanceOf(AirbrakeNetworkError);
+      expect((err as Error).message).toMatch(
+        /while reading the HTTP 201 response body \(not retried: resending POST is unsafe/,
+      );
+      expect(scope.isDone()).toBe(true);
+      expect(nock.pendingMocks()).toEqual([]);
+    });
+
+    it('never treats a body-stage failure as "not sent", whatever its error code', async () => {
+      // A connect-phase code in the cause chain would otherwise classify as
+      // 'not-sent' and re-send the POST; once headers arrived it was sent.
+      const connectLike = Object.assign(new Error('connect ECONNREFUSED'), {
+        code: 'ECONNREFUSED',
+      });
+      const scope = api()
+        .post('/api/v4/projects/1/deploys')
+        .reply(201, () => {
+          const s = stalledBody();
+          setTimeout(() => s.destroy(connectLike), 20);
+          return s;
+        });
+      const err = await client(5000, 2)
+        .request('POST', '/api/v4/projects/1/deploys', { body: {} })
+        .then(
+          () => expect.fail('expected the request to reject'),
+          (e: unknown) => e,
+        );
+      // The error is the first attempt's: a re-sent POST would surface nock's
+      // "No match for request" from the second attempt instead.
+      expect((err as Error).message).toMatch(
+        /while reading the HTTP 201 response body \(not retried: resending POST is unsafe/,
+      );
+      expect(scope.isDone()).toBe(true);
+    });
+
     it('surfaces a body-stage timeout after exhausting retries', async () => {
       const scope = api().get(PROJECTS).times(2).reply(200, stalledBody);
       const err = await failure(client(150, 1));
