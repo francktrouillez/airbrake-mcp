@@ -49,8 +49,8 @@
     "node": ">=20"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0",
-    "zod": "^3.23.0",
+    "@modelcontextprotocol/sdk": "^1.32.0",
+    "zod": "^3.25.28",
     "zod-to-json-schema": "^3.25.2"
   },
   "devDependencies": {
@@ -64,6 +64,6 @@
     "prettier": "^3.3.0",
     "tsx": "^4.16.0",
     "typescript": "^5.5.0",
-    "vitest": "^4.1.0"
+    "vitest": "^4.1.12"
   }
 }

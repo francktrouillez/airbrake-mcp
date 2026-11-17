@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Raised the `@modelcontextprotocol/sdk` floor from `^1.0.0` to `^1.32.0`
+  (lockfile: 1.29.0 → 1.32.2) and refreshed the lockfile via `npm audit fix`
+  to remediate: `@modelcontextprotocol/sdk` (GHSA-6qxp-vccf-f47h,
+  GHSA-22jm-h49p-29qw, GHSA-46jr-4wx8-v453, GHSA-rvq5-wwqv-78pq,
+  GHSA-f897-62hf-6gxq, GHSA-6prh-2h8m-c8cw — HTTP/OAuth transports, not
+  used by this stdio-only server) and its transitive `@hono/node-server`,
+  `hono`, `body-parser`, `proxy-addr`, `qs`, `fast-uri` and `ip-address`
+  advisories; plus dev-toolchain advisories in `vitest`/`@vitest/mocker`
+  (GHSA-82fw-gwwq-j7x9, GHSA-qxg6-89mg-rqv8), `vite`, `postcss`,
+  `source-map-js`, `nanoid`, `js-yaml`, `minimatch` and `brace-expansion`.
+  The `vitest` floor is raised to `^4.1.12` (patched release), and the `zod`
+  floor to `^3.25.28` to match the SDK's `zod` peer range (`^3.25 || ^4.0`)
+  and `zod-to-json-schema`'s (`^3.25.28 || ^4`). Still open: `zod` GHSA-mrhx-c7xc-m3w5 (fixed only in zod 4.6.6, tracked
+  separately) and `picomatch` GHSA-fc5q-39xc-vjpf (dev-only, no upstream
+  patch yet).
+
 ## [0.1.3] — 2026-06-04
 
 ### Security
