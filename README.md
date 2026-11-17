@@ -136,6 +136,7 @@ Airbrake accepts both `limit` and `per_page` on list endpoints. This MCP standar
 ```bash
 npm install
 npm test                 # vitest, 80 tests
+npm run test:coverage    # vitest with v8 coverage; fails below the thresholds in vitest.config.ts
 npm run typecheck
 npm run lint
 npm run build            # emits dist/
